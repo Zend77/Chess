@@ -340,93 +340,78 @@ class Board:
                 
                 if Square.in_range(possible_move_row, possible_move_col):
                     if self.squares[possible_move_row][possible_move_col].is_empty_or_enemy(piece.color):
-                        # Create squares of the new move
                         initial = Square(row, col)
                         final = Square(possible_move_row, possible_move_col)
-                        # Create new move
                         move = Move(initial, final)
-                        # Check potential checks
                         if bool:
                             if not self.in_check(piece, move):
-                                # Append new move
                                 piece.add_move(move)
-                            else: break
+                            else:
+                                break
                         else:
-                            # Append new move
                             piece.add_move(move)
-                        
-            # Castleing moves
+
+            # Castling moves
             if not piece.moved:
                 # Long castle (O-O-O)
                 queen_side_rook = self.squares[row][0].piece
-                if isinstance(queen_side_rook, Rook):
-                    if not queen_side_rook.moved:
-                        for c in range(1, 4):
-                            if self.squares[row][c].has_piece(): 
-                                # Cant castle, pieces in the way
+                if isinstance(queen_side_rook, Rook) and not queen_side_rook.moved:
+                    # Squares between king and rook must be empty
+                    if all(not self.squares[row][c].has_piece() for c in range(1, 4)):
+                        # Squares king passes through: col 4 (current), 3, 2
+                        can_castle = True
+                        for c in [4, 3, 2]:
+                            test_king = copy.deepcopy(piece)
+                            test_move = Move(Square(row, 4), Square(row, c))
+                            if self.in_check(test_king, test_move):
+                                can_castle = False
                                 break
-                            if c == 3:
-                                # Adds rook to king
-                                piece.queen_side_rook = queen_side_rook
-                                
-                                # Rook move
-                                initial = Square(row, 0)
-                                final = Square(row, 3)
-                                move_R = Move(initial, final)
-                                
-                                # King move
-                                initial = Square(row, col)
-                                final = Square(row, 2)
-                                move_K = Move(initial, final)
-                                
-                                # Check potential checks
-                                if bool:
-                                    if not self.in_check(piece, move_K) and not self.in_check(queen_side_rook, move_R):
-                                        # Append new move to rook
-                                        queen_side_rook.add_move(move_R)
-                                        # Append new move to king
-                                        piece.add_move(move_K)
-                                else:
-                                    # Append new move to rook
-                                    queen_side_rook.add_move(move_R)
-                                    # Append new move king
-                                    piece.add_move(move_K)
-                                
-                                
+                        if can_castle:
+                            piece.queen_side_rook = queen_side_rook
+                            # Rook move
+                            initial = Square(row, 0)
+                            final = Square(row, 3)
+                            move_R = Move(initial, final)
+                            # King move
+                            initial = Square(row, col)
+                            final = Square(row, 2)
+                            move_K = Move(initial, final)
+                            if bool:
+                                queen_side_rook.add_move(move_R)
+                                piece.add_move(move_K)
+                            else:
+                                queen_side_rook.add_move(move_R)
+                                piece.add_move(move_K)
+
                 # Short castle (O-O)
                 king_side_rook = self.squares[row][7].piece
-                if isinstance(king_side_rook, Rook):
-                    if not king_side_rook.moved:
-                        for c in range(5, 7):
-                            if self.squares[row][c].has_piece(): 
-                                # Cant castle, pieces in the way
+                if isinstance(king_side_rook, Rook) and not king_side_rook.moved:
+                    # Squares between king and rook must be empty
+                    if all(not self.squares[row][c].has_piece() for c in range(5, 7)):
+                        # Squares king passes through: col 4 (current), 5, 6
+                        can_castle = True
+                        for c in [4, 5, 6]:
+                            test_king = copy.deepcopy(piece)
+                            test_move = Move(Square(row, 4), Square(row, c))
+                            if self.in_check(test_king, test_move):
+                                can_castle = False
                                 break
-                            if c == 6:
-                                # Adds rook to king
-                                piece.king_side_rook = king_side_rook
-                                
-                                # Rook move
-                                initial = Square(row, 7)
-                                final = Square(row, 5)
-                                move_R = Move(initial, final)
-                                
-                                # King move
-                                initial = Square(row, col)
-                                final = Square(row, 6)
-                                move_K = Move(initial, final)
-                                
-                                # Check potential checks
-                                if bool:
-                                    if not self.in_check(piece, move_K) and not self.in_check(king_side_rook, move_R):
-                                        # Append new move to rook
-                                        king_side_rook.add_move(move_R)
-                                        # Append new move to king
-                                        piece.add_move(move_K)
-                                else:
-                                    # Append new move to rook
-                                    king_side_rook.add_move(move_R)
-                                    # Append new move king
-                                    piece.add_move(move_K)
+                        if can_castle:
+                            piece.king_side_rook = king_side_rook
+                            # Rook move
+                            initial = Square(row, 7)
+                            final = Square(row, 5)
+                            move_R = Move(initial, final)
+                            # King move
+                            initial = Square(row, col)
+                            final = Square(row, 6)
+                            move_K = Move(initial, final)
+                            if bool:
+                                king_side_rook.add_move(move_R)
+                                piece.add_move(move_K)
+                            else:
+                                king_side_rook.add_move(move_R)
+                                piece.add_move(move_K)
                                 
                         
         if isinstance(piece, Pawn): 
