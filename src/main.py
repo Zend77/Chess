@@ -92,12 +92,11 @@ class Main:
                         
                         # Valid move ? 
                         if board.valid_move(dragger.piece, move):
+                            # Normal capture
                             captured = board.squares[released_row][released_col].has_enemy_piece(piece.color) # type: ignore
-                            board.move(dragger.piece, move)
-                            
-                            # Check for promotion
-                            if isinstance(piece, Pawn):
-                                board.check_promotion(screen, dragger.piece, move.final)
+                            board.move(dragger.piece, move, screen)
+                            # If you dont immedietly capture via en passant, dont allow it to happen on next move
+                            board.set_true_en_passant(dragger.piece)
                             # Sounds
                             game.play_sound(captured)
                             # Show methods

@@ -118,11 +118,10 @@ class Game:
 
         # Choose color based on square color
         color = theme.moves.light if (row + col) % 2 == 0 else theme.moves.dark
-
+        # Rect
         rect = (col * SQ_SIZE, row * SQ_SIZE, SQ_SIZE, SQ_SIZE)
+        # Blit
         p.draw.rect(surface, color, rect, 3)  # outline width = 3
-
-        
 
     # Other methods
     
