@@ -51,7 +51,7 @@ class Main:
                         # Valid piece (color)
                         if piece.color == game.next_player: # type: ignore
                             game.selected_square = board.squares[clicked_row][clicked_col] # type: ignore
-                            board.calc_moves(piece, clicked_row, clicked_col)
+                            board.calc_moves(piece, clicked_row, clicked_col, bool=True)
                             dragger.save_inital(event.pos)
                             dragger.drag_piece(piece)
                             # Show methods
