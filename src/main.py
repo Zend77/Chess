@@ -84,28 +84,30 @@ class Main:
                         
                         released_row = dragger.mouseY // SQ_SIZE
                         released_col = dragger.mouseX // SQ_SIZE
-                        
-                        # Create possible move
-                        initial= Square(dragger.initial_row, dragger.initial_col)
-                        final = Square(released_row, released_col)
-                        move = Move(initial, final)
-                        
-                        # Valid move ? 
-                        if board.valid_move(dragger.piece, move):
-                            # Normal capture
-                            captured = board.squares[released_row][released_col].has_enemy_piece(piece.color) # type: ignore
-                            board.move(dragger.piece, move, screen)
-                            # If you dont immedietly capture via en passant, dont allow it to happen on next move
-                            board.set_true_en_passant(dragger.piece)
-                            # Sounds
-                            game.play_sound(captured)
-                            # Show methods
-                            game.show_bg(screen)
-                            game.show_pieces(screen)
-                            # Next turn
-                            game.next_turn()
-                            game.selected_square = None
+
+                        # Only proceed if released square is on the board
+                        if 0 <= released_row < 8 and 0 <= released_col < 8:
+                            # Create possible move
+                            initial = Square(dragger.initial_row, dragger.initial_col)
+                            final = Square(released_row, released_col)
+                            move = Move(initial, final)
                             
+                            # Valid move ? 
+                            if board.valid_move(dragger.piece, move):
+                                # Normal capture
+                                captured = board.squares[released_row][released_col].has_enemy_piece(piece.color) # type: ignore
+                                board.move(dragger.piece, move, screen)
+                                # If you dont immedietly capture via en passant, dont allow it to happen on next move
+                                board.set_true_en_passant(dragger.piece)
+                                # Sounds
+                                game.play_sound(captured)
+                                # Show methods
+                                game.show_bg(screen)
+                                game.show_pieces(screen)
+                                # Next turn
+                                game.next_turn()
+                                game.selected_square = None
+                        # If not on board, just undrag (do nothing)
                     
                     dragger.undrag_piece()
                     
