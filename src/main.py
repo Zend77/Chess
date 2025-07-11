@@ -4,7 +4,7 @@ from const import *
 from game import Game
 from move import Move
 from square import Square
-from piece import Pawn
+from move import Move
 
 class Main:
     def __init__(self):
@@ -32,6 +32,7 @@ class Main:
             game.show_selected(screen)
             game.show_moves(screen)
             game.show_pieces(screen)
+            game.show_check(screen)
             game.show_hover(screen, p.mouse.get_pos())
             
             if dragger.dragging:
@@ -60,6 +61,7 @@ class Main:
                             game.show_selected(screen)
                             game.show_moves(screen)
                             game.show_pieces(screen)
+                            game.show_check(screen)
                             game.show_hover(screen, p.mouse.get_pos())
                     else:
                         game.selected_square = None
@@ -73,6 +75,7 @@ class Main:
                         game.show_selected(screen)
                         game.show_moves(screen)
                         game.show_pieces(screen)
+                        game.show_check(screen)
                         game.show_hover(screen, p.mouse.get_pos())
                         dragger.update_blit(screen)
                         
@@ -104,6 +107,7 @@ class Main:
                                 # Show methods
                                 game.show_bg(screen)
                                 game.show_pieces(screen)
+                                game.show_check(screen)
                                 # Next turn
                                 game.next_turn()
                                 game.selected_square = None

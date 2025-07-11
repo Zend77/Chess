@@ -5,6 +5,7 @@ from board import Board
 from dragger import Dragger
 from config import Config
 from square import Square
+from move import Move
 
 class Game:
     def __init__(self):
@@ -122,6 +123,22 @@ class Game:
         rect = (col * SQ_SIZE, row * SQ_SIZE, SQ_SIZE, SQ_SIZE)
         # Blit
         p.draw.rect(surface, color, rect, 3)  # outline width = 3
+
+    def show_check(self, surface):
+        # Find the king of the player whose turn it is
+        for row in range(ROWS):
+            for col in range(COLS):
+                square = self.board.squares[row][col]
+                if square.has_piece(): # type: ignore
+                    piece = square.piece # type: ignore
+                    if piece.name == 'king' and piece.color == self.next_player: # type: ignore
+                        # Check if this king is in check
+                        if self.board.in_check(piece, Move(square, square)):
+                            # Draw a red shadow (ellipse) under the king
+                            shadow_surface = p.Surface((SQ_SIZE, SQ_SIZE), p.SRCALPHA)
+                            p.draw.ellipse(shadow_surface, (255, 0, 0, 100), (8, 16, SQ_SIZE-16, SQ_SIZE-32))
+                            surface.blit(shadow_surface, (col * SQ_SIZE, row * SQ_SIZE))
+                        return  # Only one king per color
 
     # Other methods
     
