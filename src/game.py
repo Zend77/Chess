@@ -12,115 +12,13 @@ class Game:
     def __init__(self):
         self.next_player = 'white'
         self.selected_square = None
+        self.game_over = False
+        self.end_message = ""
         self.board = Board()
         self.dragger = Dragger()
         self.config = Config()
 
-    def handle_mouse_down(self, pos):
-        dragger = self.dragger
-        board = self.board
-        dragger.update_mouse(pos)
-        clicked_row = dragger.mouseY // SQ_SIZE
-        clicked_col = dragger.mouseX // SQ_SIZE
-        if 0 <= clicked_row < 8 and 0 <= clicked_col < 8:
-            square = board.squares[clicked_row][clicked_col]
-            if square.has_piece():
-                piece = square.piece
-                if piece.color == self.next_player and not dragger.dragging:
-                    self.selected_square = square
-                    board.calc_moves(piece, clicked_row, clicked_col, bool=True)
-                    dragger.save_inital(pos)
-                    dragger.drag_piece(piece)
-                else:
-                    self.selected_square = None
-                    dragger.undrag_piece(theme_name=getattr(self.config.theme, "name", None))
-            else:
-                self.selected_square = None
-                dragger.undrag_piece(theme_name=getattr(self.config.theme, "name", None))
-        else:
-            self.selected_square = None
-            dragger.undrag_piece(theme_name=getattr(self.config.theme, "name", None))
-
-    def handle_mouse_motion(self, pos, surface):
-        if self.dragger.dragging:
-            self.dragger.update_mouse(pos)
-            self.show_bg(surface)
-            self.show_last_move(surface)
-            self.show_selected(surface)
-            self.show_moves(surface)
-            self.show_pieces(surface)
-            self.show_check(surface)
-            self.show_hover(surface, pos)
-            self.dragger.update_blit(surface, theme_name=getattr(self.config.theme, "name", None))
-
-    def handle_mouse_up(self, pos, surface):
-        dragger = self.dragger
-        board = self.board
-        if dragger.dragging:
-            dragger.update_mouse(pos)
-            released_row = dragger.mouseY // SQ_SIZE
-            released_col = dragger.mouseX // SQ_SIZE
-            if 0 <= released_row < 8 and 0 <= released_col < 8:
-                initial = Square(dragger.initial_row, dragger.initial_col)
-                final = Square(released_row, released_col)
-                move = Move(initial, final)
-                if board.valid_move(dragger.piece, move):
-                    captured = board.squares[released_row][released_col].has_enemy_piece(dragger.piece.color)
-                    board.move(dragger.piece, move, surface)
-                    self.play_sound(captured)
-
-                    # Handle promotion
-                    piece = board.squares[final.row][final.col].piece
-                    if isinstance(piece, Pawn):
-                        if final.row == 0 or final.row == 7:
-                            promoted_piece = self.prompt_promotion(surface, piece.color)
-                            promoted_piece.moved = True
-                            board.squares[final.row][final.col].piece = promoted_piece
-
-                    self.show_bg(surface)
-                    self.show_pieces(surface)
-                    self.show_check(surface)
-                    self.next_turn()
-                    self.selected_square = None
-            dragger.undrag_piece(theme_name=getattr(self.config.theme, "name", None))
-        else:
-            self.selected_square = None
-
-    def prompt_promotion(self, surface, color):
-        font = p.font.SysFont('Arial', 32)
-        options = [('Queen', 'Q'), ('Rook', 'R'), ('Bishop', 'B'), ('Knight', 'K')]
-        selecting = True
-
-        while selecting:
-            surface.fill((30, 30, 30))
-            prompt = font.render("Promote pawn to:", True, (255, 255, 255))
-            surface.blit(prompt, (WIDTH // 2 - prompt.get_width() // 2, 150))
-
-            for i, (name, key) in enumerate(options):
-                text = font.render(f"{name} - Press {key}", True, (255, 255, 255))
-                surface.blit(text, (WIDTH // 2 - text.get_width() // 2, 200 + i * 50))
-
-            p.display.flip()
-
-            for event in p.event.get():
-                if event.type == p.QUIT:
-                    p.quit()
-                    exit()
-
-                if event.type == p.KEYDOWN:
-                    if event.key == p.K_q:
-                        return Queen(color)
-                    elif event.key == p.K_r:
-                        return Rook(color)
-                    elif event.key == p.K_b:
-                        return Bishop(color)
-                    elif event.key == p.K_k:
-                        return Knight(color)
-
-        return Queen(color)
-
-    # Rendering Methods
-
+    # Show methods
     def show_bg(self, surface):
         theme = self.config.theme
         for row in range(ROWS):
@@ -187,13 +85,11 @@ class Game:
                 if square.has_piece():
                     piece = square.piece
                     if piece.name == 'king' and piece.color == self.next_player:
-                        if self.board.in_check(piece, Move(square, square)):
+                        if self.board.in_check_king(piece.color):
                             shadow_surface = p.Surface((SQ_SIZE, SQ_SIZE), p.SRCALPHA)
                             p.draw.ellipse(shadow_surface, (255, 0, 0, 100), (8, 16, SQ_SIZE - 16, SQ_SIZE - 32))
                             surface.blit(shadow_surface, (col * SQ_SIZE, row * SQ_SIZE))
                         return
-
-    # Other Methods
 
     def next_turn(self):
         self.next_player = 'white' if self.next_player == 'black' else 'black'
@@ -206,3 +102,116 @@ class Game:
 
     def restart(self):
         self.__init__()
+
+    def handle_mouse_down(self, pos):
+        dragger = self.dragger
+        board = self.board
+        dragger.update_mouse(pos)
+        clicked_row = dragger.mouseY // SQ_SIZE
+        clicked_col = dragger.mouseX // SQ_SIZE
+        if 0 <= clicked_row < 8 and 0 <= clicked_col < 8:
+            square = board.squares[clicked_row][clicked_col]
+            if square.has_piece() and square.piece.color == self.next_player and not dragger.dragging:
+                self.selected_square = square
+                board.calc_moves(square.piece, clicked_row, clicked_col, filter_checks=True)
+                dragger.save_inital(pos)
+                dragger.drag_piece(square.piece)
+            else:
+                self.selected_square = None
+                dragger.undrag_piece(theme_name=getattr(self.config.theme, "name", None))
+        else:
+            self.selected_square = None
+            dragger.undrag_piece(theme_name=getattr(self.config.theme, "name", None))
+
+    def handle_mouse_motion(self, pos, surface):
+        if self.dragger.dragging:
+            self.dragger.update_mouse(pos)
+            self.show_bg(surface)
+            self.show_last_move(surface)
+            self.show_selected(surface)
+            self.show_moves(surface)
+            self.show_pieces(surface)
+            self.show_check(surface)
+            self.show_hover(surface, pos)
+            self.dragger.update_blit(surface, theme_name=getattr(self.config.theme, "name", None))
+
+    def handle_mouse_up(self, pos, surface):
+        dragger = self.dragger
+        board = self.board
+        if dragger.dragging:
+            dragger.update_mouse(pos)
+            released_row = dragger.mouseY // SQ_SIZE
+            released_col = dragger.mouseX // SQ_SIZE
+            if 0 <= released_row < 8 and 0 <= released_col < 8:
+                initial = Square(dragger.initial_row, dragger.initial_col)
+                final = Square(released_row, released_col)
+                move = Move(initial, final)
+
+                if board.valid_move(dragger.piece, move):
+                    captured = board.squares[released_row][released_col].has_enemy_piece(dragger.piece.color)
+                    promotion_piece = None
+                    if isinstance(dragger.piece, Pawn) and (released_row == 0 or released_row == 7):
+                        promotion_piece = self.prompt_promotion(surface, dragger.piece.color)
+
+                    board.move(dragger.piece, move, surface, promotion_piece=promotion_piece)
+                    self.play_sound(captured)
+                    self.next_turn()
+                    self.selected_square = None
+
+                    # Check for game over after the move
+                    self.check_game_end()
+
+            dragger.undrag_piece(theme_name=getattr(self.config.theme, "name", None))
+        else:
+            self.selected_square = None
+
+
+
+    def prompt_promotion(self, surface, color):
+        font = p.font.SysFont('Arial', 32)
+        options = [('Queen', 'Q'), ('Rook', 'R'), ('Bishop', 'B'), ('Knight', 'K')]
+        selecting = True
+
+        while selecting:
+            surface.fill((30, 30, 30))
+            prompt = font.render("Promote pawn to:", True, (255, 255, 255))
+            surface.blit(prompt, (WIDTH // 2 - prompt.get_width() // 2, 150))
+
+            for i, (name, key) in enumerate(options):
+                text = font.render(f"{name} - Press {key}", True, (255, 255, 255))
+                surface.blit(text, (WIDTH // 2 - text.get_width() // 2, 200 + i * 50))
+
+            p.display.flip()
+
+            for event in p.event.get():
+                if event.type == p.QUIT:
+                    p.quit()
+                    exit()
+                if event.type == p.KEYDOWN:
+                    if event.key == p.K_q:
+                        return Queen(color)
+                    elif event.key == p.K_r:
+                        return Rook(color)
+                    elif event.key == p.K_b:
+                        return Bishop(color)
+                    elif event.key == p.K_k:
+                        return Knight(color)
+
+        return Queen(color)
+    
+    def show_end_screen(self, surface):
+        font = p.font.SysFont('Arial', 48)
+        text = font.render(self.end_message, True, (255, 255, 255))
+        restart_text = font.render("Press R to Restart", True, (255, 255, 255))
+        surface.fill((0, 0, 0))
+        surface.blit(text, (WIDTH // 2 - text.get_width() // 2, HEIGHT // 2 - 60))
+        surface.blit(restart_text, (WIDTH // 2 - restart_text.get_width() // 2, HEIGHT // 2 + 10))
+
+    
+    def check_game_end(self):
+        if self.board.is_checkmate(self.next_player):
+            self.end_message = "Checkmate!"
+            self.game_over = True
+        elif self.board.is_stalemate(self.next_player):
+            self.end_message = "Stalemate!"
+            self.game_over = True
