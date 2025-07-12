@@ -107,14 +107,34 @@ class King(Piece):
     def get_directions(self, row, col, board):
         offsets = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
         moves = []
+
+        # Regular one-square moves
         for dr, dc in offsets:
             r, c = row + dr, col + dc
             if Square.in_range(r, c):
                 dest_square = board.squares[r][c]
                 if dest_square.is_empty_or_enemy(self.color):
                     moves.append(Move(Square(row, col), Square(r, c, dest_square.piece)))
-        # Castling logic can be added here if needed
+
+        # Castling logic (pseudo-legal, filtered later)
+        if not self.moved:
+            back_row = 7 if self.color == 'white' else 0
+
+            # King-side castling
+            rook_sq = board.squares[back_row][7]
+            if isinstance(rook_sq.piece, Rook) and not rook_sq.piece.moved:
+                if board.squares[back_row][5].is_empty() and board.squares[back_row][6].is_empty():
+                    moves.append(Move(Square(row, col), Square(back_row, 6)))
+
+            # Queen-side castling
+            rook_sq = board.squares[back_row][0]
+            if isinstance(rook_sq.piece, Rook) and not rook_sq.piece.moved:
+                if board.squares[back_row][1].is_empty() and board.squares[back_row][2].is_empty() and board.squares[back_row][3].is_empty():
+                    moves.append(Move(Square(row, col), Square(back_row, 2)))
+
         return moves
+
+
 
     # Shared sliding logic for Bishop, Rook, Queen
     def _slide_directions(self, row, col, board, increments):

@@ -1,7 +1,3 @@
-import pygame as p
-import copy
-import os
-
 from piece import *
 from const import *
 from square import Square
