@@ -15,9 +15,9 @@ class Dragger:
         
     # Blit method
         
-    def update_blit(self, surface):
+    def update_blit(self, surface, theme_name=None):
         # Texture
-        self.piece.set_texture(size=128) # type: ignore
+        self.piece.set_texture(size=128, theme_name=theme_name) # type: ignore
         texture = self.piece.texture # type: ignore
         # Img
         img = p.image.load(texture)
@@ -40,8 +40,8 @@ class Dragger:
         self.piece = piece
         self.dragging = True
     
-    def undrag_piece(self):
+    def undrag_piece(self, theme_name=None):
         if self.piece:
-            self.piece.set_texture(size=80)
+            self.piece.set_texture(size=80, theme_name=theme_name)
         self.piece = None
         self.dragging = False

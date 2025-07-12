@@ -102,7 +102,8 @@ class Config:
             dark_moves=(255, 105, 180),    # Hot pink
             light_selected=(255, 105, 180),# Hot pink for selection
             dark_selected=(255, 20, 147),  # Deep pink for selection
-            move_highlight=(255, 215, 0)   # Gold (for a touch of yellow)
+            move_highlight=(255, 215, 0),  # Gold (for a touch of yellow)
+            name="hello_kitty"             # <-- Add this line
         )
 
         self.themes = [green, brown, blue, gray, pink, purple, hello_kitty]

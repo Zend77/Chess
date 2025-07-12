@@ -13,17 +13,25 @@ class Piece:
         self.set_texture()
         self.texture_rect = texture_rect
         
-    def set_texture(self, size=80):
-        self.texture = os.path.join(
-            f'assets/images/imgs-{size}px/{self.color}_{self.name}.png'
-        )
+    def set_texture(self, size=80, theme_name=None):
+        # Use Hello Kitty pieces if theme is hello_kitty
+        if theme_name == "hello_kitty":
+            # Use 120px for dragging, 80px for normal
+            folder_size = 120 if size > 80 else 80
+            self.texture = os.path.join(
+                f'assets/hello_kitty_images/hello_kitty_{folder_size}px/{self.color}_hello_kitty_{self.name}_{folder_size}px.png'
+            )
+        else:
+            self.texture = os.path.join(
+                f'assets/images/imgs-{size}px/{self.color}_{self.name}.png'
+            )
         
     def add_move(self, move):
         self.moves.append(move)
         
     def clear_moves(self):
         self.moves = []
-        
+
 class Pawn(Piece):
     def __init__(self, color):
         self.dir = -1 if color == 'white' else 1

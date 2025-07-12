@@ -50,6 +50,7 @@ class Game:
                     surface.blit(lable, lable_pos)
     
     def show_pieces(self, surface):
+        theme_name = getattr(self.config.theme, "name", None)
         for row in range(ROWS):
             for col in range(COLS):
                 # piece ?
@@ -57,6 +58,7 @@ class Game:
                     piece = self.board.squares[row][col].piece # type: ignore 
                    
                     if piece is not self.dragger.piece: 
+                        piece.set_texture(size=80, theme_name=theme_name)  # Pass theme name # type: ignore
                         img = p.image.load(piece.texture) # type: ignore 
                         img_center = col * SQ_SIZE + SQ_SIZE // 2, row * SQ_SIZE + SQ_SIZE // 2
                         piece.texture_rect = img.get_rect(center=img_center) # type: ignore 

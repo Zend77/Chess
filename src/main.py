@@ -24,6 +24,9 @@ class Main:
         running = True
         
         while running:
+            # Always get the current theme name
+            theme_name = getattr(game.config.theme, "name", None)
+
             screen.fill((0,0,0))
             
             # Show methods
@@ -36,7 +39,7 @@ class Main:
             game.show_hover(screen, p.mouse.get_pos())
             
             if dragger.dragging:
-                dragger.update_blit(screen)
+                dragger.update_blit(screen, theme_name=theme_name)
             
             for event in p.event.get(): 
                 # CLick mouse
@@ -77,7 +80,7 @@ class Main:
                         game.show_pieces(screen)
                         game.show_check(screen)
                         game.show_hover(screen, p.mouse.get_pos())
-                        dragger.update_blit(screen)
+                        dragger.update_blit(screen, theme_name=theme_name)
                         
                 # Release mouse
                 elif event.type == p.MOUSEBUTTONUP:
@@ -113,7 +116,7 @@ class Main:
                                 game.selected_square = None
                         # If not on board, just undrag (do nothing)
                     
-                    dragger.undrag_piece()
+                    dragger.undrag_piece(theme_name=theme_name)
                     
                 # Key press
                 elif event.type == p.KEYDOWN:
