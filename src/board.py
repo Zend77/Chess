@@ -95,14 +95,14 @@ class Board:
         for row in range(ROWS):
             for col in range(COLS):
                 square = self.squares[row][col]
-                if square.has_piece() and square.piece.name == 'king' and square.piece.color == color:
+                if square.has_piece() and square.piece.name == 'king' and square.piece.color == color: # type: ignore
                     king_row, king_col = row, col
 
         for row in range(ROWS):
             for col in range(COLS):
                 square = self.squares[row][col]
-                if square.has_enemy_piece(color):
-                    enemy_piece = square.piece
+                if square.has_enemy_piece(color): # type: ignore
+                    enemy_piece = square.piece # type: ignore
                     self.calc_moves(enemy_piece, row, col, filter_checks=False)
                     for move in enemy_piece.moves:
                         if move.final.row == king_row and move.final.col == king_col:
@@ -123,9 +123,9 @@ class Board:
         for row in range(ROWS):
             for col in range(COLS):
                 square = self.squares[row][col]
-                if square.has_piece() and square.piece.color == color:
-                    self.calc_moves(square.piece, row, col, filter_checks=True)
-                    if square.piece.moves:
+                if square.has_piece() and square.piece.color == color: # type: ignore
+                    self.calc_moves(square.piece, row, col, filter_checks=True) # type: ignore
+                    if square.piece.moves: # type: ignore
                         return True
         return False
 
@@ -146,14 +146,14 @@ class Board:
     def _create(self):
         for row in range(ROWS):
             for col in range(COLS):
-                self.squares[row][col] = Square(row, col)
+                self.squares[row][col] = Square(row, col) # type: ignore
 
     def _add_pieces(self, color):
         row_pawn, row_other = (6, 7) if color == 'white' else (1, 0)
 
         for col in range(COLS):
-            self.squares[row_pawn][col] = Square(row_pawn, col, Pawn(color))
+            self.squares[row_pawn][col] = Square(row_pawn, col, Pawn(color)) # type: ignore
 
         placements = [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook]
         for col, piece_class in enumerate(placements):
-            self.squares[row_other][col] = Square(row_other, col, piece_class(color))
+            self.squares[row_other][col] = Square(row_other, col, piece_class(color)) # type: ignore

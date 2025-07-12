@@ -7,6 +7,7 @@ from config import Config
 from square import Square
 from move import Move
 from piece import Queen, Rook, Bishop, Knight, Pawn
+from bot import Bot
 
 class Game:
     def __init__(self):
@@ -14,6 +15,8 @@ class Game:
         self.selected_square = None
         self.game_over = False
         self.end_message = ""
+        self.bot = Bot('black')
+        self.bot_enabled = True
         self.board = Board()
         self.dragger = Dragger()
         self.config = Config()
@@ -32,8 +35,8 @@ class Game:
         for row in range(ROWS):
             for col in range(COLS):
                 square = self.board.squares[row][col]
-                if square.has_piece():
-                    piece = square.piece
+                if square.has_piece(): # type: ignore
+                    piece = square.piece # type: ignore
                     if piece is not self.dragger.piece:
                         piece.set_texture(size=80, theme_name=theme_name)
                         img = p.image.load(piece.texture)
@@ -82,8 +85,8 @@ class Game:
         for row in range(ROWS):
             for col in range(COLS):
                 square = self.board.squares[row][col]
-                if square.has_piece():
-                    piece = square.piece
+                if square.has_piece(): # type: ignore
+                    piece = square.piece # type: ignore
                     if piece.name == 'king' and piece.color == self.next_player:
                         if self.board.in_check_king(piece.color):
                             shadow_surface = p.Surface((SQ_SIZE, SQ_SIZE), p.SRCALPHA)
@@ -111,11 +114,11 @@ class Game:
         clicked_col = dragger.mouseX // SQ_SIZE
         if 0 <= clicked_row < 8 and 0 <= clicked_col < 8:
             square = board.squares[clicked_row][clicked_col]
-            if square.has_piece() and square.piece.color == self.next_player and not dragger.dragging:
+            if square.has_piece() and square.piece.color == self.next_player and not dragger.dragging: # type: ignore
                 self.selected_square = square
-                board.calc_moves(square.piece, clicked_row, clicked_col, filter_checks=True)
+                board.calc_moves(square.piece, clicked_row, clicked_col, filter_checks=True) # type: ignore
                 dragger.save_inital(pos)
-                dragger.drag_piece(square.piece)
+                dragger.drag_piece(square.piece) # type: ignore
             else:
                 self.selected_square = None
                 dragger.undrag_piece(theme_name=getattr(self.config.theme, "name", None))
@@ -148,7 +151,7 @@ class Game:
                 move = Move(initial, final)
 
                 if board.valid_move(dragger.piece, move):
-                    captured = board.squares[released_row][released_col].has_enemy_piece(dragger.piece.color)
+                    captured = board.squares[released_row][released_col].has_enemy_piece(dragger.piece.color) # type: ignore
                     promotion_piece = None
                     if isinstance(dragger.piece, Pawn) and (released_row == 0 or released_row == 7):
                         promotion_piece = self.prompt_promotion(surface, dragger.piece.color)
@@ -160,6 +163,10 @@ class Game:
 
                     # Check for game over after the move
                     self.check_game_end()
+                    
+                    # If bot is enbled, let it play a move
+                    if self.bot_enabled and self.next_player == self.bot.color and not self.game_over:
+                        self.play_bot_turn(surface)
 
             dragger.undrag_piece(theme_name=getattr(self.config.theme, "name", None))
         else:
@@ -198,6 +205,16 @@ class Game:
                         return Knight(color)
 
         return Queen(color)
+    
+    
+    def play_bot_turn(self, surface):
+        piece, move = self.bot.bot_move(self.board)
+        if piece and move:
+            captured = self.board.squares[move.final.row][move.final.col].has_enemy_piece(piece.color)
+            self.board.move(piece, move, surface)
+            self.play_sound(captured)
+            self.next_turn()
+            self.check_game_end()
     
     def show_end_screen(self, surface):
         font = p.font.SysFont('Arial', 48)

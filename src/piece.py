@@ -82,21 +82,21 @@ class Bishop(Piece):
         super().__init__('bishop', color, 3.001)
 
     def get_directions(self, row, col, board):
-        return self._slide_directions(row, col, board, [(-1, -1), (-1, 1), (1, -1), (1, 1)])
+        return self._slide_directions(row, col, board, [(-1, -1), (-1, 1), (1, -1), (1, 1)]) # type: ignore
 
 class Rook(Piece):
     def __init__(self, color):
         super().__init__('rook', color, 5.0)
 
     def get_directions(self, row, col, board):
-        return self._slide_directions(row, col, board, [(-1, 0), (1, 0), (0, -1), (0, 1)])
+        return self._slide_directions(row, col, board, [(-1, 0), (1, 0), (0, -1), (0, 1)]) # type: ignore
 
 class Queen(Piece):
     def __init__(self, color):
         super().__init__('queen', color, 9.0)
 
     def get_directions(self, row, col, board):
-        return self._slide_directions(row, col, board, [
+        return self._slide_directions(row, col, board, [ # type: ignore
             (-1, -1), (-1, 1), (1, -1), (1, 1), (-1, 0), (1, 0), (0, -1), (0, 1)
         ])
 
