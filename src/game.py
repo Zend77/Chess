@@ -13,10 +13,10 @@ class Game:
     def __init__(self):
         self.next_player = 'white'
         self.selected_square = None
-        self.game_over = False
+        self.game_over = True
         self.end_message = ""
         self.bot = Bot('black')
-        self.bot_enabled = True
+        self.bot_enabled = False
         self.board = Board()
         self.dragger = Dragger()
         self.config = Config()

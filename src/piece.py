@@ -44,23 +44,33 @@ class Pawn(Piece):
         if Square.in_range(one_step) and board.squares[one_step][col].is_empty():
             moves.append(Move(Square(row, col), Square(one_step, col)))
 
-            # Two steps from start position
+            # Two-step move from starting position
             two_step = row + 2 * self.dir
             if row == start_row and board.squares[two_step][col].is_empty():
                 moves.append(Move(Square(row, col), Square(two_step, col)))
 
-        # Captures
+        # Normal diagonal captures
         for dc in [-1, 1]:
             r, c = one_step, col + dc
             if Square.in_range(r, c):
                 target = board.squares[r][c]
                 if target.has_enemy_piece(self.color):
                     moves.append(Move(Square(row, col), Square(r, c, target.piece)))
+                    
+        # En passant
+        last_move = board.last_move
+        if last_move:
+            last_piece = board.squares[last_move.final.row][last_move.final.col].piece
+            if isinstance(last_piece, Pawn):
+                if abs(last_move.initial.row - last_move.final.row) == 2:
+                    if last_move.final.row == row and abs(last_move.final.col - col) == 1:
+                        ep_row = row + self.dir
+                        ep_col = last_move.final.col
+                        moves.append(Move(Square(row, col), Square(ep_row, ep_col, last_piece)))
 
-        # En passant captures
-        # (Logic for en passant will go here if needed)
 
         return moves
+
 
 class Knight(Piece):
     def __init__(self, color):
