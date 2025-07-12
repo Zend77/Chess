@@ -56,15 +56,39 @@ class Board:
         final_square = self.squares[move.final.row][move.final.col]
         captured_piece = final_square.piece
 
+        # Special case: castling move
+        if isinstance(piece, King) and abs(move.final.col - move.initial.col) == 2:
+            step = 1 if move.final.col > move.initial.col else -1
+            for intermediate_col in range(move.initial.col, move.final.col + step, step):
+                temp_final = self.squares[move.initial.row][intermediate_col]
+                # Temporarily place the king on intermediate square
+                temp_piece = temp_final.piece
+                initial_square.piece = None
+                temp_final.piece = piece
+
+                if self.in_check_king(piece.color):
+                    # Restore and return True
+                    temp_final.piece = temp_piece
+                    initial_square.piece = piece
+                    return True
+
+                temp_final.piece = temp_piece
+
+            initial_square.piece = piece
+            return False
+
+        # Standard move simulation
         final_square.piece = piece
         initial_square.piece = None
 
         king_in_check = self.in_check_king(piece.color)
 
+        # Undo move
         initial_square.piece = piece
         final_square.piece = captured_piece
 
         return king_in_check
+
 
     def in_check_king(self, color):
         king_row, king_col = -1, -1
@@ -116,6 +140,7 @@ class Board:
             if filter_checks and self.in_check(piece, move):
                 continue
             piece.add_move(move)
+
 
 
     def _create(self):

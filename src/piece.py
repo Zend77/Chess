@@ -108,7 +108,7 @@ class King(Piece):
         offsets = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
         moves = []
 
-        # Regular one-square moves
+        # Normal adjacent moves
         for dr, dc in offsets:
             r, c = row + dr, col + dc
             if Square.in_range(r, c):
@@ -116,23 +116,24 @@ class King(Piece):
                 if dest_square.is_empty_or_enemy(self.color):
                     moves.append(Move(Square(row, col), Square(r, c, dest_square.piece)))
 
-        # Castling logic (pseudo-legal, filtered later)
+        # Castling candidates (pseudo-legal)
         if not self.moved:
             back_row = 7 if self.color == 'white' else 0
 
-            # King-side castling
+            # King-side
             rook_sq = board.squares[back_row][7]
             if isinstance(rook_sq.piece, Rook) and not rook_sq.piece.moved:
-                if board.squares[back_row][5].is_empty() and board.squares[back_row][6].is_empty():
+                if all(board.squares[back_row][c].is_empty() for c in [5, 6]):
                     moves.append(Move(Square(row, col), Square(back_row, 6)))
 
-            # Queen-side castling
+            # Queen-side
             rook_sq = board.squares[back_row][0]
             if isinstance(rook_sq.piece, Rook) and not rook_sq.piece.moved:
-                if board.squares[back_row][1].is_empty() and board.squares[back_row][2].is_empty() and board.squares[back_row][3].is_empty():
+                if all(board.squares[back_row][c].is_empty() for c in [1, 2, 3]):
                     moves.append(Move(Square(row, col), Square(back_row, 2)))
 
         return moves
+
 
 
 
