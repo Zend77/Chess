@@ -13,7 +13,7 @@ class Game:
     def __init__(self):
         self.next_player = 'white'
         self.selected_square = None
-        self.game_over = True
+        self.game_over = False
         self.end_message = ""
         self.bot = Bot('black')
         self.bot_enabled = False
@@ -26,7 +26,7 @@ class Game:
         theme = self.config.theme
         for row in range(ROWS):
             for col in range(COLS):
-                color = theme.bg.light if (row + col) % 2 == 0 else theme.bg.dark
+                color = theme.bg.dark if (row + col) % 2 == 0 else theme.bg.light
                 rect = (col * SQ_SIZE, row * SQ_SIZE, SQ_SIZE, SQ_SIZE)
                 p.draw.rect(surface, color, rect)
 
@@ -164,6 +164,16 @@ class Game:
                     # Check for game over after the move
                     self.check_game_end()
                     
+                    # Show material advantage
+                    white_score, black_score = self.board.evaluate_material()
+                    diff = round(white_score + black_score, 1)
+                    if diff > 0:
+                        print(f"Material Advantage: White +{diff}")
+                    elif diff < 0:
+                        print(f"Material Advantage: Black +{abs(diff)}")
+                    else:
+                        print("Material Advantage: Even")
+
                     # If bot is enbled, let it play a move
                     if self.bot_enabled and self.next_player == self.bot.color and not self.game_over:
                         self.play_bot_turn(surface)

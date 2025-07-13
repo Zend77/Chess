@@ -140,8 +140,19 @@ class Board:
             if filter_checks and self.in_check(piece, move):
                 continue
             piece.add_move(move)
-
-
+            
+    def evaluate_material(self):
+        white_score = 0
+        black_score = 0
+        for row in range(ROWS):
+            for col in range(COLS):
+                square = self.squares[row][col]
+                if square.has_piece() and square.piece.color == 'white' and square.piece.value < 10: # type: ignore
+                    white_score += square.piece.value  # type: ignore
+                elif square.has_piece() and square.piece.color == 'black' and square.piece.value > -10: # type: ignore
+                    black_score += square.piece.value # type: ignore
+                
+        return white_score, black_score
 
     def _create(self):
         for row in range(ROWS):

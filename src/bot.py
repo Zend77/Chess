@@ -6,7 +6,7 @@ from square import Square
 class Bot:
     
     def __init__(self, color):
-        self.color = 'black'
+        self.color = color
         
     def bot_move(self, board):
         all_moves = []

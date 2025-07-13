@@ -90,6 +90,7 @@ class Knight(Piece):
 class Bishop(Piece):
     def __init__(self, color):
         super().__init__('bishop', color, 3.001)
+        # self.diagonal = 'light' if 
 
     def get_directions(self, row, col, board):
         return self._slide_directions(row, col, board, [(-1, -1), (-1, 1), (1, -1), (1, 1)]) # type: ignore
