@@ -82,28 +82,28 @@ class Config:
         )
 
         purple = Theme(
-            light_bg=(200, 180, 255),    # light purple
-            dark_bg=(120, 70, 180),      # dark purple
+            light_bg=(200, 180, 255),    
+            dark_bg=(120, 70, 180),      
             light_trace=(246, 246, 105),
             dark_trace=(186, 202, 43),
-            light_moves=(180, 120, 255), # highlight purple
+            light_moves=(180, 120, 255), 
             dark_moves=(120, 70, 180),
-            light_selected=(255, 0, 255),    # magenta for selection
+            light_selected=(255, 0, 255),    
             dark_selected=(180, 0, 180),
-            move_highlight=(140, 66, 245)   # bluish purple
+            move_highlight=(140, 66, 245)   
         )
 
         hello_kitty = Theme(
-            light_bg=(255, 240, 245),      # Lavender blush (very light pink)
-            dark_bg=(255, 182, 193),       # Light pink
-            light_trace=(255, 228, 225),   # Misty rose (pale pink)
-            dark_trace=(255, 192, 203),    # Pink
-            light_moves=(255, 182, 193),   # Light pink
-            dark_moves=(255, 105, 180),    # Hot pink
-            light_selected=(255, 105, 180),# Hot pink for selection
-            dark_selected=(255, 20, 147),  # Deep pink for selection
-            move_highlight=(255, 215, 0),  # Gold (for a touch of yellow)
-            name="hello_kitty"             # <-- Add this line
+            light_bg=(255, 240, 245),      
+            dark_bg=(255, 182, 193),       
+            light_trace=(255, 228, 225),   
+            dark_trace=(255, 192, 203),    
+            light_moves=(255, 182, 193),   
+            dark_moves=(255, 105, 180),    
+            light_selected=(255, 105, 180),
+            dark_selected=(255, 20, 147),  
+            move_highlight=(255, 215, 0),  
+            name="hello_kitty"             
         )
 
         self.themes = [green, brown, blue, gray, pink, purple, hello_kitty]
