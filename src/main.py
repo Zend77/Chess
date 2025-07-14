@@ -11,7 +11,7 @@ class Main:
         self.game = Game()
         self.clock = p.time.Clock()
         
-        if self.game.AI_enabled and self.game.AI.color == 'white':
+        if self.game.AI_enabled and self.game.AI.color == 'white': # type: ignore
             self.game.play_AI_turn(self.screen)
 
     def main_loop(self):

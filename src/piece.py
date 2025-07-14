@@ -67,8 +67,6 @@ class Pawn(Piece):
                         ep_row = row + self.dir
                         ep_col = last_move.final.col
                         moves.append(Move(Square(row, col), Square(ep_row, ep_col, last_piece)))
-
-
         return moves
 
 

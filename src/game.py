@@ -177,7 +177,7 @@ class Game:
                         print("Material Advantage: Even")
 
                     # If bot is enbled, let it play a move
-                    if self.AI_enabled and self.next_player == self.AI.color and not self.game_over:
+                    if self.AI_enabled and self.next_player == self.AI.color and not self.game_over: # type: ignore
                         self.play_AI_turn(surface)
 
             dragger.undrag_piece(theme_name=getattr(self.config.theme, "name", None))
@@ -250,7 +250,7 @@ class Game:
 
     
     def play_AI_turn(self, surface):
-        piece, move = self.AI.random_move(self.board)
+        piece, move = self.AI.random_move(self.board) # type: ignore
         if piece and move:
             captured = self.board.squares[move.final.row][move.final.col].has_enemy_piece(piece.color)
             self.board.move(piece, move, surface)

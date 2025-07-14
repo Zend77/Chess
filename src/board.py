@@ -65,36 +65,58 @@ class Board:
         final_square = self.squares[move.final.row][move.final.col]
         captured_piece = final_square.piece
 
-        # Special case: castling move
-        if isinstance(piece, King) and abs(move.final.col - move.initial.col) == 2:
-            step = 1 if move.final.col > move.initial.col else -1
-            for intermediate_col in range(move.initial.col, move.final.col + step, step):
-                temp_final = self.squares[move.initial.row][intermediate_col]
-                # Temporarily place the king on intermediate square
-                temp_piece = temp_final.piece
-                initial_square.piece = None
-                temp_final.piece = piece
+        # Special case: en passant
+        en_passant = (
+            isinstance(piece, Pawn) and
+            abs(move.final.col - move.initial.col) == 1 and
+            initial_square.row != move.final.row and
+            final_square.is_empty()
+        )
 
-                if self.in_check_king(piece.color):
-                    # Restore and return True
-                    temp_final.piece = temp_piece
-                    initial_square.piece = piece
-                    return True
+        captured_en_passant = None
+        if en_passant:
+            captured_square = self.squares[move.initial.row][move.final.col]
+            captured_en_passant = captured_square.piece
+            captured_square.piece = None
 
-                temp_final.piece = temp_piece
-
-            initial_square.piece = piece
-            return False
-
-        # Standard move simulation
+        # Simulate move
         final_square.piece = piece
         initial_square.piece = None
 
+        # Special case: castling
+        if isinstance(piece, King) and abs(move.final.col - move.initial.col) == 2:
+            step = 1 if move.final.col > move.initial.col else -1
+            for intermediate_col in range(move.initial.col, move.final.col + step, step):
+                temp_square = self.squares[move.initial.row][intermediate_col]
+                original_piece = temp_square.piece
+                temp_square.piece = piece
+
+                if self.in_check_king(piece.color):
+                    # Undo castling simulation
+                    temp_square.piece = original_piece
+                    initial_square.piece = piece
+                    final_square.piece = captured_piece
+                    if en_passant:
+                        captured_square.piece = captured_en_passant
+                    return True
+
+                temp_square.piece = original_piece
+
+            # No check in any intermediate square
+            initial_square.piece = piece
+            final_square.piece = captured_piece
+            if en_passant:
+                captured_square.piece = captured_en_passant
+            return False
+
+        # Standard check detection
         king_in_check = self.in_check_king(piece.color)
 
-        # Undo move
+        # Undo simulated move
         initial_square.piece = piece
         final_square.piece = captured_piece
+        if en_passant:
+            captured_square.piece = captured_en_passant
 
         return king_in_check
 
