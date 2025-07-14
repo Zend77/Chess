@@ -75,6 +75,9 @@ class Main:
                         else:
                             game.draw_offered = True
                             print("Draw offered. Press 'D' again to accept.")
+                    elif event.key == p.K_f and not game.game_over:
+                        fen_str = input("Enter FEN: ")
+                        game.load_fen(fen_str)
                 elif event.type == p.QUIT:
                     running = False
 

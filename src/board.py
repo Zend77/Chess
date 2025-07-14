@@ -3,17 +3,25 @@ from piece import *
 from const import *
 from square import Square
 from move import Move
-from sound import Sound
+from fen import FEN
 
 class Board:
     squares: List[List[Square]]
     last_move: Optional[Move]
     halfmove_clock: int
+    next_player: str
+    castling_rights: str
+    en_passant: str
+    fullmove_number: int
 
     def __init__(self):
         self.squares: List[List[Square]] = []
         self.last_move: Optional[Move] = None
         self.halfmove_clock: int = 0
+        self.fullmove_number: int = 1
+        self.next_player: str = 'white'
+        self.castling_rights: str = 'KQkq'
+        self.en_passant: str = '-'
         self._create()
         self._add_pieces('white')
         self._add_pieces('black')
@@ -37,11 +45,28 @@ class Board:
         piece.clear_moves()
         self.last_move = move
 
+        # Castling rights update
+        self.update_castling_rights(piece, initial, final)
+
+        # At the end of the move, increment fullmove_number if black just moved
+        if self.next_player == 'black':
+            self.fullmove_number += 1
+
     def _handle_en_passant(self, piece: Piece, initial: Square, final: Square) -> None:
         if isinstance(piece, Pawn):
+            # Set en passant target if pawn moves two squares
+            if abs(final.row - initial.row) == 2:
+                col_letter = Square.ALPHACOLS[initial.col]
+                row_num = str((initial.row + final.row) // 2 + 1)
+                self.en_passant = f"{col_letter}{row_num}"
+            else:
+                self.en_passant = '-'
+            # Handle en passant capture
             diff = final.col - initial.col
             if diff != 0 and self.squares[final.row][final.col].is_empty:
                 self.squares[initial.row][initial.col + diff].piece = None
+        else:
+            self.en_passant = '-'
 
     def _move_piece(self, piece: Piece, initial: Square, final: Square) -> None:
         self.squares[initial.row][initial.col].piece = None
@@ -210,3 +235,46 @@ class Board:
         placements = [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook]
         for col, piece_class in enumerate(placements):
             self.squares[row_other][col] = Square(row_other, col, piece_class(color))
+
+    def set_fen(self, fen: str) -> None:
+        from fen import FEN
+        FEN.load(self, fen)
+
+    def update_castling_rights(self, piece: Piece, initial: Square, final: Square) -> None:
+        # Remove castling rights if king or rook moves, or rook is captured on original square
+        rights = self.castling_rights.replace('-', '')
+
+        # White king moves
+        if isinstance(piece, King) and piece.color == 'white':
+            rights = rights.replace('K', '').replace('Q', '')
+        # Black king moves
+        if isinstance(piece, King) and piece.color == 'black':
+            rights = rights.replace('k', '').replace('q', '')
+        # White rook moves from a1
+        if isinstance(piece, Rook) and piece.color == 'white' and initial.row == 7 and initial.col == 0:
+            rights = rights.replace('Q', '')
+        # White rook moves from h1
+        if isinstance(piece, Rook) and piece.color == 'white' and initial.row == 7 and initial.col == 7:
+            rights = rights.replace('K', '')
+        # Black rook moves from a8
+        if isinstance(piece, Rook) and piece.color == 'black' and initial.row == 0 and initial.col == 0:
+            rights = rights.replace('q', '')
+        # Black rook moves from h8
+        if isinstance(piece, Rook) and piece.color == 'black' and initial.row == 0 and initial.col == 7:
+            rights = rights.replace('k', '')
+
+        # Rook is captured on its original square
+        captured_piece = self.squares[final.row][final.col].piece
+        if isinstance(captured_piece, Rook):
+            if captured_piece.color == 'white':
+                if final.row == 7 and final.col == 0:
+                    rights = rights.replace('Q', '')
+                if final.row == 7 and final.col == 7:
+                    rights = rights.replace('K', '')
+            if captured_piece.color == 'black':
+                if final.row == 0 and final.col == 0:
+                    rights = rights.replace('q', '')
+                if final.row == 0 and final.col == 7:
+                    rights = rights.replace('k', '')
+
+        self.castling_rights = rights if rights else '-'

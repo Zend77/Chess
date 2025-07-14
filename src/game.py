@@ -313,4 +313,12 @@ class Game:
             self.end_message = "Draw: 50-Move Rule"
             self.game_over = True
 
+    def load_fen(self, fen: str) -> None:
+        self.board.set_fen(fen)
+        self.selected_square = None
+        self.game_over = False
+        self.end_message = ""
+        self.draw_offered = False
+        self.dragger.undrag_piece(theme_name=self.theme_name)
+
 
