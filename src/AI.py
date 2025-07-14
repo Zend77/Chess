@@ -3,12 +3,12 @@ from const import *
 from move import Move
 from square import Square
 
-class Bot:
+class AI:
     
     def __init__(self, color):
         self.color = color
         
-    def bot_move(self, board):
+    def random_move(self, board):
         all_moves = []
         
         for row in range(ROWS):
@@ -24,4 +24,7 @@ class Bot:
             return None, None
     
         return random.choice(all_moves)
+    
+
+
     

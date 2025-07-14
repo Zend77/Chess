@@ -7,7 +7,7 @@ from config import Config
 from square import Square
 from move import Move
 from piece import Queen, Rook, Bishop, Knight, Pawn
-from bot import Bot
+from AI import AI
 
 class Game:
     def __init__(self):
@@ -15,8 +15,8 @@ class Game:
         self.selected_square = None
         self.game_over = False
         self.end_message = ""
-        self.bot = Bot('black')
-        self.bot_enabled = False
+        self.AI = AI('black')
+        self.AI_enabled = True
         self.board = Board()
         self.dragger = Dragger()
         self.config = Config()
@@ -175,8 +175,8 @@ class Game:
                         print("Material Advantage: Even")
 
                     # If bot is enbled, let it play a move
-                    if self.bot_enabled and self.next_player == self.bot.color and not self.game_over:
-                        self.play_bot_turn(surface)
+                    if self.AI_enabled and self.next_player == self.AI.color and not self.game_over:
+                        self.play_AI_turn(surface)
 
             dragger.undrag_piece(theme_name=getattr(self.config.theme, "name", None))
         else:
@@ -217,8 +217,8 @@ class Game:
         return Queen(color)
     
     
-    def play_bot_turn(self, surface):
-        piece, move = self.bot.bot_move(self.board)
+    def play_AI_turn(self, surface):
+        piece, move = self.AI.random_move(self.board)
         if piece and move:
             captured = self.board.squares[move.final.row][move.final.col].has_enemy_piece(piece.color)
             self.board.move(piece, move, surface)
