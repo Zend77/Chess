@@ -1,6 +1,7 @@
 import pygame as p
 
 from const import *
+from AI import AI
 from game import Game
 
 class Main:
@@ -11,7 +12,7 @@ class Main:
         self.game = Game()
         self.clock = p.time.Clock()
         # Play AI turn if needed at start
-        if self.game.ai_enabled and getattr(self.game.ai, "color", None) == 'white':
+        while self.game.ai_enabled and self.game.ai and not self.game.game_over and self.game.next_player == self.game.ai.color:
             self.game.play_AI_turn(self.screen)
 
     def main_loop(self):
@@ -59,6 +60,14 @@ class Main:
                     elif event.key == p.K_g and not game.game_over:
                         game.ai_enabled = not game.ai_enabled
                         print(f"AI Enabled: {game.ai_enabled}")
+                        if game.ai_enabled:
+                            if game.ai is None:
+                                game.ai = AI(game.next_player)
+                            else:
+                                game.ai.color = game.next_player
+                            # If it's the AI's turn, let it move immediately
+                            if game.next_player == game.ai.color:
+                                game.play_AI_turn(screen)
                     elif event.key == p.K_d and not game.game_over:
                         if game.draw_offered:
                             game.end_message = "Draw: Mutual Agreement"

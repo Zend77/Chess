@@ -28,8 +28,8 @@ class Game:
         self.game_over = False
         self.end_message = ""
         self.draw_offered = False
-        self.ai: Optional[AI] = AI(None)
-        self.ai_enabled = True
+        self.ai: Optional[AI] = AI(self.next_player)
+        self.ai_enabled = False  # Default to off
         self.AI_color_prompt()
         self.board = Board()
         self.dragger = Dragger()
@@ -41,11 +41,23 @@ class Game:
 
     def show_bg(self, surface) -> None:
         theme = self.config.theme
+        font = self.config.font  # Use your configured font
         for row in range(ROWS):
             for col in range(COLS):
                 color = theme.bg.dark if (row + col) % 2 == 0 else theme.bg.light
                 rect = (col * SQ_SIZE, row * SQ_SIZE, SQ_SIZE, SQ_SIZE)
                 p.draw.rect(surface, color, rect)
+
+                # Draw row numbers (1-8) on the leftmost column
+                if col == 0:
+                    label = font.render(str(ROWS - row), True, (0, 0, 0))
+                    surface.blit(label, (5, row * SQ_SIZE + 5))
+
+                # Draw column letters (a-h) on the bottom row using Square.ALPHACOLS
+                if row == ROWS - 1:
+                    from square import Square  # Local import to avoid circular import
+                    label = font.render(Square.ALPHACOLS[col], True, (0, 0, 0))
+                    surface.blit(label, (col * SQ_SIZE + SQ_SIZE - 20, HEIGHT - 25))
 
     def show_highlight(self, surface, squares, color, alpha=160) -> None:
         for square in squares:
@@ -187,7 +199,7 @@ class Game:
 
                     # Check for game over after the move
                     self.check_game_end()
-                    
+
                     # Show material advantage
                     white_score, black_score = self.board.evaluate_material()
                     diff = round(white_score + black_score, 1)
@@ -198,7 +210,7 @@ class Game:
                     else:
                         print("Material Advantage: Even")
 
-                    # If bot is enabled, let it play a move
+                    # After a successful human move and next_turn()
                     if self.ai_enabled and self.ai and self.next_player == self.ai.color and not self.game_over:
                         self.play_AI_turn(surface)
 
@@ -265,7 +277,7 @@ class Game:
                         print("AI will play as black.")
                         selecting = False
                     elif event.key == p.K_n:
-                        self.ai = None
+                        self.ai = AI(self.next_player)  # Always have an AI instance
                         self.ai_enabled = False
                         print("No AI will play.")
                         selecting = False
