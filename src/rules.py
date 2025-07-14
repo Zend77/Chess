@@ -88,17 +88,13 @@ class Rules:
         return moves
 
     @staticmethod
-    def is_in_check(board, color):
-        king_row, king_col = Rules.find_king(board, color)
-        return Rules.is_square_attacked(board, king_row, king_col, by_color=('white' if color == 'black' else 'black'))
-
-    @staticmethod
     def is_square_attacked(board, row, col, by_color):
+        """Return True if the square (row, col) is attacked by any piece of by_color."""
         for r in range(8):
             for c in range(8):
                 sq = board.squares[r][c]
-                if sq.has_piece() and sq.piece.color == by_color:
-                    for move in Rules.generate_pseudo_legal_moves(board, sq.piece, r, c):
+                if sq.has_piece and sq.piece.color == by_color:
+                    for move in sq.piece.get_moves(r, c, board):
                         if move.final.row == row and move.final.col == col:
                             return True
         return False
@@ -108,9 +104,15 @@ class Rules:
         for r in range(8):
             for c in range(8):
                 sq = board.squares[r][c]
-                if sq.has_piece() and sq.piece.name == 'king' and sq.piece.color == color:
+                if sq.has_piece and sq.piece.name == 'king' and sq.piece.color == color:
                     return r, c
         raise Exception("King not found!")
+
+    @staticmethod
+    def is_in_check(board, color):
+        king_row, king_col = Rules.find_king(board, color)
+        enemy_color = 'white' if color == 'black' else 'black'
+        return Rules.is_square_attacked(board, king_row, king_col, by_color=enemy_color)
 
     @staticmethod
     def filter_legal_moves(board, piece, row, col):
