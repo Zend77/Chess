@@ -10,6 +10,9 @@ class Main:
         p.display.set_caption('Chess')
         self.game = Game()
         self.clock = p.time.Clock()
+        
+        if self.game.AI_enabled and self.game.AI.color == 'white':
+            self.game.play_AI_turn(self.screen)
 
     def main_loop(self):
         screen = self.screen
@@ -53,7 +56,16 @@ class Main:
                     elif event.key == p.K_r:
                         self.game = Game()
                         game = self.game
-
+                    elif event.key == p.K_g and not game.game_over:
+                        game.AI_enabled = not game.AI_enabled
+                        print(f"AI Enabled: {game.AI_enabled}")
+                    elif event.key == p.K_d and not game.game_over:
+                        if game.draw_offered:
+                            game.end_message = "Draw: Mutual Agreement"
+                            game.game_over = True
+                        else:
+                            game.draw_offered = True
+                            print("Draw offered. Press 'D' again to accept.")
                 elif event.type == p.QUIT:
                     running = False
 

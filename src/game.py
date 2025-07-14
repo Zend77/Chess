@@ -15,8 +15,10 @@ class Game:
         self.selected_square = None
         self.game_over = False
         self.end_message = ""
-        self.AI = AI('black')
+        self.draw_offered = False
+        self.AI = AI(None)
         self.AI_enabled = True
+        self.AI_color_prompt()
         self.board = Board()
         self.dragger = Dragger()
         self.config = Config()
@@ -99,7 +101,7 @@ class Game:
 
     def change_theme(self):
         self.config.change_themes()
-
+    
     def play_sound(self, captured=False):
         (self.config.capture_sound if captured else self.config.move_sound).play()
 
@@ -182,8 +184,6 @@ class Game:
         else:
             self.selected_square = None
 
-
-
     def prompt_promotion(self, surface, color):
         font = p.font.SysFont('Arial', 32)
         options = [('Queen', 'Q'), ('Rook', 'R'), ('Bishop', 'B'), ('Knight', 'K')]
@@ -216,6 +216,38 @@ class Game:
 
         return Queen(color)
     
+    def AI_color_prompt(self):
+        screen = p.display.set_mode((WIDTH, HEIGHT))
+        font = p.font.SysFont('Arial', 32)
+        prompt = font.render("Press W for AI as White, B for AI as Black, N for no AI", True, (255, 255, 255))
+
+        selecting = True
+        while selecting:
+            screen.fill((0, 0, 0))
+            screen.blit(prompt, (WIDTH // 2 - prompt.get_width() // 2, HEIGHT // 2))
+            p.display.flip()
+
+            for event in p.event.get():
+                if event.type == p.QUIT:
+                    p.quit()
+                    exit()
+                if event.type == p.KEYDOWN:
+                    if event.key == p.K_w:
+                        self.AI = AI('white')
+                        self.AI_enabled = True
+                        print("AI will play as white.")
+                        selecting = False
+                    elif event.key == p.K_b:
+                        self.AI = AI('black')
+                        self.AI = True
+                        print("AI will play as black.")
+                        selecting = False
+                    elif event.key == p.K_n:
+                        self.AI = None
+                        self.AI_enabled = False
+                        print("No AI will play.")
+                        selecting = False
+
     
     def play_AI_turn(self, surface):
         piece, move = self.AI.random_move(self.board)
@@ -242,3 +274,11 @@ class Game:
         elif self.board.is_stalemate(self.next_player):
             self.end_message = "Stalemate!"
             self.game_over = True
+        elif self.board.is_dead_position():
+            self.end_message = "Draw: Dead Position!"
+            self.game_over = True
+        elif self.board.is_fifty_move_rule():
+            self.end_message = "Draw: 50-Move Rule"
+            self.game_over = True
+
+

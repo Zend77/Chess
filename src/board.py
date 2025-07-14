@@ -8,6 +8,7 @@ class Board:
     def __init__(self):
         self.squares = [[None for _ in range(COLS)] for _ in range(ROWS)]
         self.last_move = None
+        self.halfmove_clock = 0
         self._create()
         self._add_pieces('white')
         self._add_pieces('black')
@@ -15,6 +16,14 @@ class Board:
     def move(self, piece, move, surface=None, promotion_piece=None):
         initial = move.initial
         final = move.final
+        captured_piece = self.squares[final.row][final.col].piece
+        
+        # 50 move draw
+        if isinstance(piece, Pawn) or captured_piece:
+            self.halfmove_clock = 0
+        else:
+            self.halfmove_clock += 1
+
 
         # En passant capture
         en_passant_empty = self.squares[final.row][final.col].is_empty()
@@ -118,6 +127,28 @@ class Board:
         if self.in_check_king(color):
             return False
         return not self.player_has_moves(color)
+    
+    def is_dead_position(self):
+        pieces = []
+        for row in self.squares:
+            for square in row:
+                if square.has_piece():
+                    pieces.append(square.piece)
+        if len(pieces) == 2:  # King vs King
+            return True
+        if len(pieces) == 3:
+            piece_names = [p.name for p in pieces if p.name != 'king']
+            if 'bishop' in piece_names or 'knight' in piece_names:
+                return True
+        if len(pieces) == 4:
+            bishops = [p for p in pieces if p.name == 'bishop']
+            if len(bishops) == 2 and bishops[0].color != bishops[1].color:
+                return True
+        return False
+    
+    def is_fifty_move_rule(self):
+        return self.halfmove_clock >= 100
+
 
     def player_has_moves(self, color):
         for row in range(ROWS):
