@@ -29,24 +29,27 @@ class Piece:
     def clear_moves(self):
         self.moves = []
 
+    def get_moves(self, row, col, board):
+        # To be overridden in subclasses
+        return []
+
 class Pawn(Piece):
     def __init__(self, color):
         super().__init__('pawn', color, 1.0)
         self.dir = -1 if color == 'white' else 1
         self.en_passant = False
 
-    def get_directions(self, row, col, board):
+    def get_moves(self, row, col, board):
         moves = []
         start_row = 6 if self.color == 'white' else 1
 
         # Forward move
         one_step = row + self.dir
-        if Square.in_range(one_step) and board.squares[one_step][col].is_empty():
+        if Square.in_range(one_step) and board.squares[one_step][col].is_empty:
             moves.append(Move(Square(row, col), Square(one_step, col)))
-
             # Two-step move from starting position
             two_step = row + 2 * self.dir
-            if row == start_row and board.squares[two_step][col].is_empty():
+            if row == start_row and board.squares[two_step][col].is_empty:
                 moves.append(Move(Square(row, col), Square(two_step, col)))
 
         # Normal diagonal captures
@@ -56,7 +59,6 @@ class Pawn(Piece):
                 target = board.squares[r][c]
                 if target.has_enemy_piece(self.color):
                     moves.append(Move(Square(row, col), Square(r, c, target.piece)))
-                    
         # En passant
         last_move = board.last_move
         if last_move:
@@ -69,12 +71,11 @@ class Pawn(Piece):
                         moves.append(Move(Square(row, col), Square(ep_row, ep_col, last_piece)))
         return moves
 
-
 class Knight(Piece):
     def __init__(self, color):
         super().__init__('knight', color, 3.0)
 
-    def get_directions(self, row, col, board):
+    def get_moves(self, row, col, board):
         offsets = [(-2, 1), (-1, 2), (1, 2), (2, 1), (2, -1), (1, -2), (-1, -2), (-2, -1)]
         moves = []
         for dr, dc in offsets:
@@ -88,32 +89,80 @@ class Knight(Piece):
 class Bishop(Piece):
     def __init__(self, color):
         super().__init__('bishop', color, 3.001)
-        # self.diagonal = 'light' if 
 
-    def get_directions(self, row, col, board):
-        return self._slide_directions(row, col, board, [(-1, -1), (-1, 1), (1, -1), (1, 1)]) # type: ignore
+    def get_moves(self, row, col, board):
+        return self._slide_moves(row, col, board, [(-1, -1), (-1, 1), (1, 1), (1, -1)])
+
+    def _slide_moves(self, row, col, board, increments):
+        moves = []
+        for dr, dc in increments:
+            r, c = row + dr, col + dc
+            while Square.in_range(r, c):
+                dest_square = board.squares[r][c]
+                if dest_square.is_empty:
+                    moves.append(Move(Square(row, col), Square(r, c)))
+                elif dest_square.has_enemy_piece(self.color):
+                    moves.append(Move(Square(row, col), Square(r, c, dest_square.piece)))
+                    break
+                else:
+                    break
+                r += dr
+                c += dc
+        return moves
 
 class Rook(Piece):
     def __init__(self, color):
         super().__init__('rook', color, 5.0)
 
-    def get_directions(self, row, col, board):
-        return self._slide_directions(row, col, board, [(-1, 0), (1, 0), (0, -1), (0, 1)]) # type: ignore
+    def get_moves(self, row, col, board):
+        return self._slide_moves(row, col, board, [(-1, 0), (1, 0), (0, -1), (0, 1)])
+
+    def _slide_moves(self, row, col, board, increments):
+        moves = []
+        for dr, dc in increments:
+            r, c = row + dr, col + dc
+            while Square.in_range(r, c):
+                dest_square = board.squares[r][c]
+                if dest_square.is_empty:
+                    moves.append(Move(Square(row, col), Square(r, c)))
+                elif dest_square.has_enemy_piece(self.color):
+                    moves.append(Move(Square(row, col), Square(r, c, dest_square.piece)))
+                    break
+                else:
+                    break
+                r += dr
+                c += dc
+        return moves
 
 class Queen(Piece):
     def __init__(self, color):
         super().__init__('queen', color, 9.0)
 
-    def get_directions(self, row, col, board):
-        return self._slide_directions(row, col, board, [ # type: ignore
-            (-1, -1), (-1, 1), (1, -1), (1, 1), (-1, 0), (1, 0), (0, -1), (0, 1)
-        ])
+    def get_moves(self, row, col, board):
+        return self._slide_moves(row, col, board, [(-1, -1), (-1, 1), (1, -1), (1, 1), (-1, 0), (1, 0), (0, -1), (0, 1)])
+
+    def _slide_moves(self, row, col, board, increments):
+        moves = []
+        for dr, dc in increments:
+            r, c = row + dr, col + dc
+            while Square.in_range(r, c):
+                dest_square = board.squares[r][c]
+                if dest_square.is_empty:
+                    moves.append(Move(Square(row, col), Square(r, c)))
+                elif dest_square.has_enemy_piece(self.color):
+                    moves.append(Move(Square(row, col), Square(r, c, dest_square.piece)))
+                    break
+                else:
+                    break
+                r += dr
+                c += dc
+        return moves
 
 class King(Piece):
     def __init__(self, color):
         super().__init__('king', color, 10000.0)
 
-    def get_directions(self, row, col, board):
+    def get_moves(self, row, col, board):
         offsets = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
         moves = []
 
@@ -132,38 +181,13 @@ class King(Piece):
             # King-side
             rook_sq = board.squares[back_row][7]
             if isinstance(rook_sq.piece, Rook) and not rook_sq.piece.moved:
-                if all(board.squares[back_row][c].is_empty() for c in [5, 6]):
+                if all(board.squares[back_row][c].is_empty for c in [5, 6]):
                     moves.append(Move(Square(row, col), Square(back_row, 6)))
 
             # Queen-side
             rook_sq = board.squares[back_row][0]
             if isinstance(rook_sq.piece, Rook) and not rook_sq.piece.moved:
-                if all(board.squares[back_row][c].is_empty() for c in [1, 2, 3]):
+                if all(board.squares[back_row][c].is_empty for c in [1, 2, 3]):
                     moves.append(Move(Square(row, col), Square(back_row, 2)))
 
         return moves
-
-
-
-
-    # Shared sliding logic for Bishop, Rook, Queen
-    def _slide_directions(self, row, col, board, increments):
-        moves = []
-        for dr, dc in increments:
-            r, c = row + dr, col + dc
-            while Square.in_range(r, c):
-                dest_square = board.squares[r][c]
-                if dest_square.is_empty():
-                    moves.append(Move(Square(row, col), Square(r, c)))
-                elif dest_square.has_enemy_piece(self.color):
-                    moves.append(Move(Square(row, col), Square(r, c, dest_square.piece)))
-                    break
-                else:
-                    break
-                r += dr
-                c += dc
-        return moves
-
-# Add _slide_directions to Bishop, Rook, Queen via mixin or inheritance
-for cls in [Bishop, Rook, Queen]:
-    cls._slide_directions = King._slide_directions
