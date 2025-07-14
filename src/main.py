@@ -10,22 +10,23 @@ class Main:
         p.display.set_caption('Chess')
         self.game = Game()
         self.clock = p.time.Clock()
-        
-        if self.game.AI_enabled and self.game.AI.color == 'white': # type: ignore
+        # Play AI turn if needed at start
+        if self.game.ai_enabled and getattr(self.game.ai, "color", None) == 'white':
             self.game.play_AI_turn(self.screen)
 
     def main_loop(self):
         screen = self.screen
-        game = self.game
         clock = self.clock
 
         running = True
 
         while running:
+            game = self.game  # Always get the latest game object
+            theme_name = getattr(game.config.theme, "name", None)
             screen.fill((0, 0, 0))
 
+            # Draw board and pieces
             if not game.game_over:
-                # Normal gameplay
                 game.show_bg(screen)
                 game.show_last_move(screen)
                 game.show_selected(screen)
@@ -35,9 +36,8 @@ class Main:
                 game.show_hover(screen, p.mouse.get_pos())
 
                 if game.dragger.dragging:
-                    game.dragger.update_blit(screen, theme_name=getattr(game.config.theme, "name", None))
+                    game.dragger.update_blit(screen, theme_name=theme_name)
             else:
-                # Show game end screen
                 game.show_end_screen(screen)
 
             for event in p.event.get():
@@ -57,8 +57,8 @@ class Main:
                         self.game = Game()
                         game = self.game
                     elif event.key == p.K_g and not game.game_over:
-                        game.AI_enabled = not game.AI_enabled
-                        print(f"AI Enabled: {game.AI_enabled}")
+                        game.ai_enabled = not game.ai_enabled
+                        print(f"AI Enabled: {game.ai_enabled}")
                     elif event.key == p.K_d and not game.game_over:
                         if game.draw_offered:
                             game.end_message = "Draw: Mutual Agreement"
