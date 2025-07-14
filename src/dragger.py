@@ -21,12 +21,13 @@ class Dragger:
         self.dragging: bool = False
 
     def update_blit(self, surface, theme_name: Optional[str]=None) -> None:
-        self.piece.set_texture(size=128, theme_name=theme_name) # type: ignore
-        texture = self.piece.texture # type: ignore
-        img = p.image.load(texture)
-        img_center = (self.mouseX, self.mouseY)
-        self.piece.texture_rect = img.get_rect(center=img_center) # type: ignore
-        surface.blit(img, self.piece.texture_rect) # type: ignore
+        if self.piece is not None:
+            self.piece.set_texture(size=128, theme_name=theme_name)
+            texture = self.piece.texture
+            img = p.image.load(texture)
+            img_center = (self.mouseX, self.mouseY)
+            self.piece.texture_rect = img.get_rect(center=img_center)
+            surface.blit(img, self.piece.texture_rect)
 
     def update_mouse(self, pos: tuple[int, int]) -> None:
         self.mouseX, self.mouseY = pos
