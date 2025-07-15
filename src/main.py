@@ -11,6 +11,8 @@ class Main:
         p.display.set_caption('Chess')
         self.game = Game()
         self.clock = p.time.Clock()
+        self.show_perft = False
+        self.perft_depth = 2  # Default perft depth
         # Play AI turn if needed at start
         while self.game.ai_enabled and self.game.ai and not self.game.game_over and self.game.next_player == self.game.ai.color:
             self.game.play_AI_turn(self.screen)
@@ -35,6 +37,10 @@ class Main:
                 game.show_pieces(screen)
                 game.show_check(screen)
                 game.show_hover(screen, p.mouse.get_pos())
+
+                # --- SHOW PERFT RESULT IF REQUESTED ---
+                if self.show_perft:
+                    game.show_perft_result(screen, self.perft_depth)
 
                 if game.dragger.dragging:
                     game.dragger.update_blit(screen, theme_name=theme_name)
@@ -78,6 +84,19 @@ class Main:
                     elif event.key == p.K_f and not game.game_over:
                         fen_str = input("Enter FEN: ")
                         game.load_fen(fen_str)
+                    elif event.key == p.K_p and not game.game_over:
+                        # Toggle perft display
+                        self.show_perft = not self.show_perft
+                        print(f"Perft display: {self.show_perft}")
+                    elif event.key == p.K_1:
+                        self.perft_depth = 1
+                        print("Perft depth set to 1")
+                    elif event.key == p.K_2:
+                        self.perft_depth = 2
+                        print("Perft depth set to 2")
+                    elif event.key == p.K_3:
+                        self.perft_depth = 3
+                        print("Perft depth set to 3")
                 elif event.type == p.QUIT:
                     running = False
 

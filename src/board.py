@@ -4,6 +4,7 @@ from const import *
 from square import Square
 from move import Move
 from fen import FEN
+from piece import Queen, Rook, Bishop, Knight
 
 class Board:
     squares: List[List[Square]]
@@ -23,8 +24,6 @@ class Board:
         self.castling_rights: str = 'KQkq'
         self.en_passant: str = '-'
         self._create()
-        self._add_pieces('white')
-        self._add_pieces('black')
 
     def move(self, piece: Piece, move: Move, surface=None, promotion_piece: Optional[Piece]=None) -> None:
         initial = move.initial
@@ -83,9 +82,24 @@ class Board:
                 rook.moved = True
 
     def _handle_promotion(self, piece: Piece, final: Square, promotion_piece: Optional[Piece]) -> None:
-        if isinstance(piece, Pawn) and (final.row == 0 or final.row == 7) and promotion_piece:
-            promotion_piece.moved = True
-            self.squares[final.row][final.col].piece = promotion_piece
+        if isinstance(piece, Pawn) and (final.row == 0 or final.row == 7):
+            promo = None
+            if promotion_piece:
+                promo = promotion_piece
+            elif self.last_move is not None and hasattr(self.last_move, "promotion") and self.last_move.promotion:
+                color = piece.color
+                p = self.last_move.promotion
+                if p == 'q':
+                    promo = Queen(color)
+                elif p == 'r':
+                    promo = Rook(color)
+                elif p == 'b':
+                    promo = Bishop(color)
+                elif p == 'n':
+                    promo = Knight(color)
+            if promo:
+                promo.moved = True
+                self.squares[final.row][final.col].piece = promo
 
     def valid_move(self, piece: Piece, move: Move) -> bool:
         return move in piece.moves

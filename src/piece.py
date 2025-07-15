@@ -42,15 +42,20 @@ class Pawn(Piece):
     def get_moves(self, row, col, board):
         moves = []
         start_row = 6 if self.color == 'white' else 1
+        promotion_row = 0 if self.color == 'white' else 7
 
         # Forward move
         one_step = row + self.dir
         if Square.in_range(one_step) and board.squares[one_step][col].is_empty:
-            moves.append(Move(Square(row, col), Square(one_step, col)))
-            # Two-step move from starting position
-            two_step = row + 2 * self.dir
-            if row == start_row and board.squares[two_step][col].is_empty:
-                moves.append(Move(Square(row, col), Square(two_step, col)))
+            if one_step == promotion_row:
+                for promo in ['q', 'r', 'b', 'n']:
+                    moves.append(Move(Square(row, col), Square(one_step, col), promotion=promo))
+            else:
+                moves.append(Move(Square(row, col), Square(one_step, col)))
+                # Two-step move from starting position
+                two_step = row + 2 * self.dir
+                if row == start_row and board.squares[two_step][col].is_empty:
+                    moves.append(Move(Square(row, col), Square(two_step, col)))
 
         # Normal diagonal captures
         for dc in [-1, 1]:
@@ -58,7 +63,11 @@ class Pawn(Piece):
             if Square.in_range(r, c):
                 target = board.squares[r][c]
                 if target.has_enemy_piece(self.color):
-                    moves.append(Move(Square(row, col), Square(r, c, target.piece)))
+                    if r == promotion_row:
+                        for promo in ['q', 'r', 'b', 'n']:
+                            moves.append(Move(Square(row, col), Square(r, c), captured=target.piece, promotion=promo))
+                    else:
+                        moves.append(Move(Square(row, col), Square(r, c), captured=target.piece))
         # En passant
         last_move = board.last_move
         if last_move:

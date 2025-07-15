@@ -62,6 +62,26 @@ class FEN:
         except Exception:
             board.fullmove_number = 1
 
+        # After parsing, update .moved for kings/rooks if castling rights are missing
+        wk = board.squares[7][4].piece
+        if isinstance(wk, King):
+            wk.moved = 'K' not in board.castling_rights and 'Q' not in board.castling_rights
+        bk = board.squares[0][4].piece
+        if isinstance(bk, King):
+            bk.moved = 'k' not in board.castling_rights and 'q' not in board.castling_rights
+        wrk = board.squares[7][7].piece
+        if isinstance(wrk, Rook):
+            wrk.moved = 'K' not in board.castling_rights
+        wq = board.squares[7][0].piece
+        if isinstance(wq, Rook):
+            wq.moved = 'Q' not in board.castling_rights
+        brk = board.squares[0][7].piece
+        if isinstance(brk, Rook):
+            brk.moved = 'k' not in board.castling_rights
+        bq = board.squares[0][0].piece
+        if isinstance(bq, Rook):
+            bq.moved = 'q' not in board.castling_rights
+
     @staticmethod
     def get_fen(board: "Board") -> str:
         """Generate a FEN string from the current board state."""

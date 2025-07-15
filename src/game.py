@@ -9,6 +9,8 @@ from square import Square
 from move import Move
 from piece import Queen, Rook, Bishop, Knight, Pawn, Piece
 from AI import AI
+from fen import FEN
+from perft import perft
 
 class Game:
     next_player: str
@@ -21,6 +23,7 @@ class Game:
     board: Board
     dragger: Dragger
     config: Config
+    fen_history: list[str]
 
     def __init__(self):
         self.next_player = 'white'
@@ -32,8 +35,11 @@ class Game:
         self.ai_enabled = False  # Default to off
         self.AI_color_prompt()
         self.board = Board()
+        self.board.set_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
         self.dragger = Dragger()
         self.config = Config()
+        self.fen_history: list[str] = []
+        self.record_fen()
 
     @property
     def theme_name(self) -> Optional[str]:
@@ -140,7 +146,24 @@ class Game:
         (self.config.capture_sound if captured else self.config.move_sound).play()
 
     def restart(self) -> None:
-        self.__init__()
+        self.load_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
+
+    def fen_without_clocks(self, fen: str) -> str:
+        # Remove the last two fields (halfmove/fullmove)
+        return ' '.join(fen.split()[:4])
+
+    def record_fen(self):
+        fen = FEN.get_fen(self.board)
+        self.fen_history.append(self.fen_without_clocks(fen))
+
+    def count_fen_occurrences(self, fen: str) -> int:
+        fen = self.fen_without_clocks(fen)
+        return self.fen_history.count(fen)
+
+    def is_threefold_repetition(self) -> bool:
+        fen = FEN.get_fen(self.board)
+        fen = self.fen_without_clocks(fen)
+        return self.count_fen_occurrences(fen) >= 3
 
     def handle_mouse_down(self, pos) -> None:
         dragger = self.dragger
@@ -196,6 +219,9 @@ class Game:
                     self.play_sound(captured)
                     self.next_turn()
                     self.selected_square = None
+
+                    # RECORD FEN HERE
+                    self.record_fen()
 
                     # Check for game over after the move
                     self.check_game_end()
@@ -289,6 +315,8 @@ class Game:
             self.board.move(piece, move, surface)
             self.play_sound(captured)
             self.next_turn()
+            # RECORD FEN HERE
+            self.record_fen()
             self.check_game_end()
     
     def show_end_screen(self, surface) -> None:
@@ -312,6 +340,9 @@ class Game:
         elif self.board.is_fifty_move_rule():
             self.end_message = "Draw: 50-Move Rule"
             self.game_over = True
+        elif self.is_threefold_repetition():
+            self.end_message = "Draw: Threefold Repetition"
+            self.game_over = True
 
     def load_fen(self, fen: str) -> None:
         self.board.set_fen(fen)
@@ -320,5 +351,14 @@ class Game:
         self.end_message = ""
         self.draw_offered = False
         self.dragger.undrag_piece(theme_name=self.theme_name)
+        self.fen_history = []
+        self.record_fen()
+
+    def show_perft_result(self, surface, depth: int = 2) -> None:
+        # Run perft for the current position and next player
+        result = perft(self.board, self.next_player, depth)
+        font = self.config.font
+        label = font.render(f"Perft({depth}): {result}", True, (0, 0, 0))
+        surface.blit(label, (10, 10))
 
 

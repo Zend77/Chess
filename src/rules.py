@@ -18,10 +18,10 @@ class Rules:
         if isinstance(piece, Pawn):
             dir = piece.dir
             # Forward
-            if Square.in_range(row + dir) and board.squares[row + dir][col].is_empty():
+            if Square.in_range(row + dir) and board.squares[row + dir][col].is_empty:
                 moves.append(Move(Square(row, col), Square(row + dir, col)))
                 # Double first move
-                if not piece.moved and board.squares[row + dir * 2][col].is_empty():
+                if not piece.moved and board.squares[row + dir * 2][col].is_empty:
                     moves.append(Move(Square(row, col), Square(row + dir * 2, col)))
             # Captures
             for dc in [-1, 1]:
@@ -30,10 +30,17 @@ class Rules:
                     if sq.has_enemy_piece(piece.color):
                         moves.append(Move(Square(row, col), Square(row + dir, col + dc, sq.piece)))
                 # En passant
-                if row == (3 if piece.color == 'white' else 4):
-                    side_sq = board.squares[row][col + dc] if Square.in_range(col + dc) else None
-                    if side_sq and isinstance(side_sq.piece, Pawn) and side_sq.piece.color != piece.color and side_sq.piece.en_passant:
-                        moves.append(Move(Square(row, col), Square(row + dir, col + dc, side_sq.piece)))
+                if row == (3 if piece.color == 'white' else 4) and Square.in_range(col + dc):
+                    # Check if the target square matches the en passant square
+                    target_col_letter = Square.get_alphacol(col + dc)
+                    target_row_num = str(8 - (row + dir))  # Convert to chess notation
+                    target_square = f"{target_col_letter}{target_row_num}"
+                    
+                    if board.en_passant == target_square:
+                        # There should be an enemy pawn beside us
+                        side_sq = board.squares[row][col + dc]
+                        if side_sq.has_piece and isinstance(side_sq.piece, Pawn) and side_sq.piece.color != piece.color:
+                            moves.append(Move(Square(row, col), Square(row + dir, col + dc, side_sq.piece)))
 
         # Knights
         elif isinstance(piece, Knight):
@@ -51,7 +58,7 @@ class Rules:
                 r, c = row + dr, col + dc
                 while Square.in_range(r, c):
                     sq = board.squares[r][c]
-                    if sq.is_empty():
+                    if sq.is_empty:
                         moves.append(Move(Square(row, col), Square(r, c)))
                     elif sq.has_enemy_piece(piece.color):
                         moves.append(Move(Square(row, col), Square(r, c, sq.piece)))
@@ -76,13 +83,13 @@ class Rules:
                 # King-side castle
                 rook_sq = board.squares[back_row][7]
                 if isinstance(rook_sq.piece, Rook) and not rook_sq.piece.moved:
-                    if all(board.squares[back_row][c].is_empty() for c in [5, 6]):
+                    if all(board.squares[back_row][c].is_empty for c in [5, 6]):
                         moves.append(Move(Square(row, col), Square(back_row, 6)))
 
                 # Queen-side castle
                 rook_sq = board.squares[back_row][0]
                 if isinstance(rook_sq.piece, Rook) and not rook_sq.piece.moved:
-                    if all(board.squares[back_row][c].is_empty() for c in [1, 2, 3]):
+                    if all(board.squares[back_row][c].is_empty for c in [1, 2, 3]):
                         moves.append(Move(Square(row, col), Square(back_row, 2)))
 
         return moves
