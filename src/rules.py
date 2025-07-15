@@ -17,11 +17,12 @@ class Rules:
         # Pawns
         if isinstance(piece, Pawn):
             dir = piece.dir
+            start_row = 6 if piece.color == 'white' else 1  # Starting rank for pawns
             # Forward
             if Square.in_range(row + dir) and board.squares[row + dir][col].is_empty:
                 moves.append(Move(Square(row, col), Square(row + dir, col)))
-                # Double first move
-                if not piece.moved and board.squares[row + dir * 2][col].is_empty:
+                # Double first move - only from starting rank
+                if row == start_row and Square.in_range(row + dir * 2) and board.squares[row + dir * 2][col].is_empty:
                     moves.append(Move(Square(row, col), Square(row + dir * 2, col)))
             # Captures
             for dc in [-1, 1]:
@@ -77,20 +78,37 @@ class Rules:
                     add_move_if_valid(row + dr, col + dc)
 
             # Castling
-            if not piece.moved:
+            if not piece.moved and board.castling_rights:
                 back_row = 7 if piece.color == 'white' else 0
+                
+                # Check castling rights from board state
+                can_castle_kingside = ('K' in board.castling_rights) if piece.color == 'white' else ('k' in board.castling_rights)
+                can_castle_queenside = ('Q' in board.castling_rights) if piece.color == 'white' else ('q' in board.castling_rights)
 
-                # King-side castle
-                rook_sq = board.squares[back_row][7]
-                if isinstance(rook_sq.piece, Rook) and not rook_sq.piece.moved:
-                    if all(board.squares[back_row][c].is_empty for c in [5, 6]):
-                        moves.append(Move(Square(row, col), Square(back_row, 6)))
+                # King cannot castle if currently in check
+                enemy_color = 'black' if piece.color == 'white' else 'white'
+                if Rules.is_square_attacked_simple(board, row, col, enemy_color):
+                    pass  # King is in check, no castling allowed
+                else:
+                    # King-side castle
+                    if can_castle_kingside:
+                        rook_sq = board.squares[back_row][7]
+                        if isinstance(rook_sq.piece, Rook) and not rook_sq.piece.moved:
+                            if all(board.squares[back_row][c].is_empty for c in [5, 6]):
+                                # Check that king doesn't pass through or land on attacked squares
+                                if (not Rules.is_square_attacked_simple(board, back_row, 5, enemy_color) and 
+                                    not Rules.is_square_attacked_simple(board, back_row, 6, enemy_color)):
+                                    moves.append(Move(Square(row, col), Square(back_row, 6)))
 
-                # Queen-side castle
-                rook_sq = board.squares[back_row][0]
-                if isinstance(rook_sq.piece, Rook) and not rook_sq.piece.moved:
-                    if all(board.squares[back_row][c].is_empty for c in [1, 2, 3]):
-                        moves.append(Move(Square(row, col), Square(back_row, 2)))
+                    # Queen-side castle
+                    if can_castle_queenside:
+                        rook_sq = board.squares[back_row][0]
+                        if isinstance(rook_sq.piece, Rook) and not rook_sq.piece.moved:
+                            if all(board.squares[back_row][c].is_empty for c in [1, 2, 3]):
+                                # Check that king doesn't pass through or land on attacked squares
+                                if (not Rules.is_square_attacked_simple(board, back_row, 3, enemy_color) and 
+                                    not Rules.is_square_attacked_simple(board, back_row, 2, enemy_color)):
+                                    moves.append(Move(Square(row, col), Square(back_row, 2)))
 
         return moves
 
@@ -104,6 +122,34 @@ class Rules:
                     for move in sq.piece.get_moves(r, c, board):
                         if move.final.row == row and move.final.col == col:
                             return True
+        return False
+
+    @staticmethod
+    def is_square_attacked_simple(board, row, col, by_color):
+        """
+        Return True if the square (row, col) is attacked by any piece of by_color.
+        This version excludes castling moves to avoid recursion during castling checks.
+        """
+        for r in range(8):
+            for c in range(8):
+                sq = board.squares[r][c]
+                if sq.has_piece and sq.piece.color == by_color:
+                    # Get moves without castling to avoid recursion
+                    if sq.piece.name == 'king':
+                        # For king, only check basic king moves (no castling)
+                        for dr in [-1, 0, 1]:
+                            for dc in [-1, 0, 1]:
+                                if dr == 0 and dc == 0:
+                                    continue
+                                new_row, new_col = r + dr, c + dc
+                                if (0 <= new_row <= 7 and 0 <= new_col <= 7 and
+                                    new_row == row and new_col == col):
+                                    return True
+                    else:
+                        # For other pieces, use normal move generation
+                        for move in sq.piece.get_moves(r, c, board):
+                            if move.final.row == row and move.final.col == col:
+                                return True
         return False
 
     @staticmethod

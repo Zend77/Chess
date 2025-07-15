@@ -63,6 +63,9 @@ class Main:
                     elif event.key == p.K_r:
                         self.game = Game()
                         game = self.game
+                    elif event.key == p.K_LEFT:
+                        # Undo move on left arrow key
+                        game.undo_move()
                     elif event.key == p.K_g and not game.game_over:
                         game.ai_enabled = not game.ai_enabled
                         print(f"AI Enabled: {game.ai_enabled}")

@@ -255,14 +255,17 @@ class Board:
         FEN.load(self, fen)
 
     def update_castling_rights(self, piece: Piece, initial: Square, final: Square) -> None:
-        # Remove castling rights if king or rook moves, or rook is captured on original square
+        # Remove castling rights if king or rook moves from their original squares, or rook is captured on original square
         rights = self.castling_rights.replace('-', '')
+        
+        # Store captured piece before move is made
+        captured_piece = self.squares[final.row][final.col].piece
 
-        # White king moves
-        if isinstance(piece, King) and piece.color == 'white':
+        # White king moves from original square (e1/row 7, col 4)
+        if isinstance(piece, King) and piece.color == 'white' and initial.row == 7 and initial.col == 4:
             rights = rights.replace('K', '').replace('Q', '')
-        # Black king moves
-        if isinstance(piece, King) and piece.color == 'black':
+        # Black king moves from original square (e8/row 0, col 4)
+        if isinstance(piece, King) and piece.color == 'black' and initial.row == 0 and initial.col == 4:
             rights = rights.replace('k', '').replace('q', '')
         # White rook moves from a1
         if isinstance(piece, Rook) and piece.color == 'white' and initial.row == 7 and initial.col == 0:
@@ -278,7 +281,6 @@ class Board:
             rights = rights.replace('k', '')
 
         # Rook is captured on its original square
-        captured_piece = self.squares[final.row][final.col].piece
         if isinstance(captured_piece, Rook):
             if captured_piece.color == 'white':
                 if final.row == 7 and final.col == 0:
@@ -290,5 +292,7 @@ class Board:
                     rights = rights.replace('q', '')
                 if final.row == 0 and final.col == 7:
                     rights = rights.replace('k', '')
+
+        self.castling_rights = rights if rights else '-'
 
         self.castling_rights = rights if rights else '-'

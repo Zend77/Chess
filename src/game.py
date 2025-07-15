@@ -138,6 +138,7 @@ class Game:
 
     def next_turn(self) -> None:
         self.next_player = 'white' if self.next_player == 'black' else 'black'
+        self.board.next_player = self.next_player  # Keep board in sync
 
     def change_theme(self) -> None:
         self.config.change_themes()
@@ -154,16 +155,56 @@ class Game:
 
     def record_fen(self):
         fen = FEN.get_fen(self.board)
-        self.fen_history.append(self.fen_without_clocks(fen))
+        self.fen_history.append(fen)  # Store complete FEN for undo functionality
 
     def count_fen_occurrences(self, fen: str) -> int:
-        fen = self.fen_without_clocks(fen)
-        return self.fen_history.count(fen)
+        fen_without_clocks = self.fen_without_clocks(fen)
+        # Count occurrences in history by comparing without clocks
+        count = 0
+        for historical_fen in self.fen_history:
+            if self.fen_without_clocks(historical_fen) == fen_without_clocks:
+                count += 1
+        return count
 
     def is_threefold_repetition(self) -> bool:
         fen = FEN.get_fen(self.board)
         fen = self.fen_without_clocks(fen)
         return self.count_fen_occurrences(fen) >= 3
+
+    def undo_move(self) -> bool:
+        """
+        Undo the last move by restoring the previous position from FEN history.
+        Returns True if undo was successful, False if no moves to undo.
+        """
+        # Need at least 2 positions in history (current + previous)
+        if len(self.fen_history) < 2:
+            print("No moves to undo")
+            return False
+        
+        # Remove current position
+        self.fen_history.pop()
+        
+        # Get previous position
+        previous_fen = self.fen_history[-1]
+        
+        # Restore the board state without adding to history again
+        self.board.set_fen(previous_fen)
+        
+        # Clear any selected squares and dragging state
+        self.selected_square = None
+        self.dragger.undrag_piece(theme_name=self.theme_name)
+        
+        # Update next player based on the restored position
+        # The FEN loading should have set board.next_player correctly
+        self.next_player = self.board.next_player
+        
+        # Clear any game over state in case we're undoing the final move
+        self.game_over = False
+        self.end_message = ""
+        self.draw_offered = False
+        
+        print(f"Move undone. Next player: {self.next_player}. Position restored to: {previous_fen}")
+        return True
 
     def handle_mouse_down(self, pos) -> None:
         dragger = self.dragger
@@ -207,13 +248,22 @@ class Game:
             if 0 <= released_row < 8 and 0 <= released_col < 8:
                 initial = Square(dragger.initial_row, dragger.initial_col)
                 final = Square(released_row, released_col)
-                move = Move(initial, final)
+                
+                # Check if there's a captured piece
+                captured_piece = board.squares[released_row][released_col].piece if board.squares[released_row][released_col].has_piece else None
+                
+                # Check if this is a promotion move first
+                promotion_piece: Optional[Piece] = None
+                if isinstance(dragger.piece, Pawn) and (released_row == 0 or released_row == 7):
+                    promotion_piece = self.prompt_promotion(surface, dragger.piece.color)
+                    # Create move with promotion info and captured piece
+                    promotion_char = self.piece_to_promotion_char(promotion_piece)
+                    move = Move(initial, final, captured=captured_piece, promotion=promotion_char)
+                else:
+                    move = Move(initial, final, captured=captured_piece)
 
                 if dragger.piece is not None and board.valid_move(dragger.piece, move):
                     captured = board.squares[released_row][released_col].has_enemy_piece(dragger.piece.color)
-                    promotion_piece: Optional[Piece] = None
-                    if isinstance(dragger.piece, Pawn) and (released_row == 0 or released_row == 7):
-                        promotion_piece = self.prompt_promotion(surface, dragger.piece.color)
 
                     board.move(dragger.piece, move, surface, promotion_piece=promotion_piece)
                     self.play_sound(captured)
@@ -360,5 +410,21 @@ class Game:
         font = self.config.font
         label = font.render(f"Perft({depth}): {result}", True, (0, 0, 0))
         surface.blit(label, (10, 10))
+
+    def piece_to_promotion_char(self, piece: Optional[Piece]) -> Optional[str]:
+        """Convert a promotion piece to its character representation."""
+        if piece is None:
+            return None
+        
+        piece_name = piece.name.lower()
+        if piece_name == 'queen':
+            return 'q'
+        elif piece_name == 'rook':
+            return 'r'
+        elif piece_name == 'bishop':
+            return 'b'
+        elif piece_name == 'knight':
+            return 'n'
+        return None
 
 
