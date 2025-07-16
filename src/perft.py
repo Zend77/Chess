@@ -304,20 +304,8 @@ class PerftTest:
         # Test 6: Complex position
         self.run_test_position(
             "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8",
-            1,
-            "Complex Posisiton depth 1"
-        )
-        
-        self.run_test_position(
-            "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8",
-            2,
-            "Complex Posisiton depth 2"
-        )
-        
-        self.run_test_position(
-            "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8",
-            3,
-            "Complex Posisiton depth 3"
+            5,
+            "Complex Posisiton depth 5"
         )
 
 

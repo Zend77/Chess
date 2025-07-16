@@ -56,7 +56,11 @@ class Board:
             # Set en passant target if pawn moves two squares
             if abs(final.row - initial.row) == 2:
                 col_letter = Square.ALPHACOLS[initial.col]
-                row_num = str((initial.row + final.row) // 2 + 1)
+                # En passant target is the square the pawn "jumped over"
+                # For white pawn: 2->4, en passant is 3 (in 1-8 notation that's row 6 in 0-7 array)
+                # For black pawn: 7->5, en passant is 6 (in 1-8 notation that's row 3 in 0-7 array)
+                en_passant_row = (initial.row + final.row) // 2  # The skipped square
+                row_num = str(8 - en_passant_row)  # Convert array index to rank number
                 self.en_passant = f"{col_letter}{row_num}"
             else:
                 self.en_passant = '-'
