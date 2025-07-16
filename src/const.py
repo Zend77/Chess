@@ -1,9 +1,9 @@
-# Screen Diemnsions
-WIDTH = HEIGHT = 800
+# Screen dimensions for the pygame window
+WIDTH = HEIGHT = 800  # Square window for chess board
 
-# Board Dimensions
-ROWS = COLS = 8
-SQ_SIZE = WIDTH // COLS
+# Chess board dimensions
+ROWS = COLS = 8  # Standard 8x8 chess board
+SQ_SIZE = WIDTH // COLS  # Each square size in pixels
 
-# FPS
-MAX_FPS = 60
+# Game performance settings
+MAX_FPS = 60  # Frame rate limit for smooth gameplay

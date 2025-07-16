@@ -1,21 +1,27 @@
 """
 Known Perft Results for chess position verification.
-These are the expected results from Stockfish and other engines.
+These are the expected node counts from Stockfish and other established engines
+at various depths for different chess positions. Used to verify that our
+move generation is 100% accurate and follows all chess rules correctly.
+
+Perft (Performance Test) counts the number of leaf nodes at a given depth,
+which must match exactly for the engine to be considered correct.
 """
 
-# Standard perft test positions with known results
+# Standard perft test positions with known results from trusted engines
 PERFT_POSITIONS = {
     "starting_position": {
         "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-        "description": "Starting position",
+        "description": "Standard chess starting position",
         "results": {
-            1: 20,
-            2: 400,
-            3: 8902,
-            4: 197281,
+            1: 20,        # 20 possible opening moves
+            2: 400,       # 400 positions after 1 move for each side
+            3: 8902,      # 8,902 positions after 1.5 moves
+            4: 197281,    # etc.
             5: 4865609,
             6: 119060324
         },
+        # Move-by-move breakdown for depth 3 (useful for debugging)
         "divide_3": {
             "a2a3": 380, "b2b3": 420, "c2c3": 420, "d2d3": 539, "e2e3": 599,
             "f2f3": 380, "g2g3": 420, "h2h3": 380, "a2a4": 420, "b2b4": 421,
@@ -26,7 +32,7 @@ PERFT_POSITIONS = {
     
     "en_passant_position": {
         "fen": "rnbqkbnr/pppp1ppp/8/4p3/3P4/8/PPP2PPP/RNBQKBNR b KQkq d3 0 2",
-        "description": "En passant position",
+        "description": "Position with en passant capture available",
         "results": {
             1: 31,
             2: 1137,

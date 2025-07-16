@@ -13,6 +13,11 @@ from fen import FEN
 from perft import perft
 
 class Game:
+    """
+    Main game controller that manages the chess game state, player interactions,
+    AI opponent, and visual rendering. Handles move validation, game ending conditions,
+    and provides interfaces for both human and computer players.
+    """
     next_player: str
     selected_square: Optional[Square]
     game_over: bool
@@ -26,58 +31,75 @@ class Game:
     fen_history: list[str]
 
     def __init__(self):
-        self.next_player = 'white'
-        self.selected_square: Optional[Square] = None
+        self.next_player = 'white'  # White always moves first in chess
+        self.selected_square: Optional[Square] = None  # Currently selected square for piece movement
         self.game_over = False
         self.end_message = ""
         self.draw_offered = False
         self.ai: Optional[AI] = AI(self.next_player)
-        self.ai_enabled = False  # Default to off
-        self.AI_color_prompt()
+        self.ai_enabled = False  # AI opponent disabled by default
+        self.AI_color_prompt()  # Let user choose AI color
         self.board = Board()
+        # Set up the standard starting position
         self.board.set_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
-        self.dragger = Dragger()
-        self.config = Config()
-        self.fen_history: list[str] = []
+        self.dragger = Dragger()  # Handles drag-and-drop piece movement
+        self.config = Config()  # Visual themes and settings
+        self.fen_history: list[str] = []  # Track position history for threefold repetition
         self.record_fen()
 
     @property
     def theme_name(self) -> Optional[str]:
+        """Get the current visual theme name for piece textures."""
         return getattr(self.config.theme, "name", None)
 
     def show_bg(self, surface) -> None:
+        """
+        Draw the chess board background with alternating light and dark squares.
+        Also draws rank numbers (1-8) and file letters (a-h) for reference.
+        """
         theme = self.config.theme
-        font = self.config.font  # Use your configured font
+        font = self.config.font
+        
         for row in range(ROWS):
             for col in range(COLS):
+                # Alternate square colors in checkerboard pattern
                 color = theme.bg.dark if (row + col) % 2 == 0 else theme.bg.light
                 rect = (col * SQ_SIZE, row * SQ_SIZE, SQ_SIZE, SQ_SIZE)
                 p.draw.rect(surface, color, rect)
 
-                # Draw row numbers (1-8) on the leftmost column
+                # Draw rank numbers (1-8) on the left edge
                 if col == 0:
                     label = font.render(str(ROWS - row), True, (0, 0, 0))
                     surface.blit(label, (5, row * SQ_SIZE + 5))
 
-                # Draw column letters (a-h) on the bottom row using Square.ALPHACOLS
+                # Draw file letters (a-h) on the bottom edge
                 if row == ROWS - 1:
-                    from square import Square  # Local import to avoid circular import
+                    from square import Square  # Local import to avoid circular dependency
                     label = font.render(Square.ALPHACOLS[col], True, (0, 0, 0))
                     surface.blit(label, (col * SQ_SIZE + SQ_SIZE - 20, HEIGHT - 25))
 
     def show_highlight(self, surface, squares, color, alpha=160) -> None:
+        """
+        Draw colored highlights on specified squares.
+        Used for showing selected pieces, valid moves, checks, etc.
+        """
         for square in squares:
             row, col = square.row, square.col
             highlight_surface = p.Surface((SQ_SIZE, SQ_SIZE), p.SRCALPHA)
-            highlight_surface.fill((*color, alpha))
+            highlight_surface.fill((*color, alpha))  # Color with transparency
             surface.blit(highlight_surface, (col * SQ_SIZE, row * SQ_SIZE))
 
     def show_pieces(self, surface) -> None:
+        """
+        Render all pieces on the board using the current theme.
+        Skips the piece being dragged (shown separately by dragger).
+        """
         for row in range(ROWS):
             for col in range(COLS):
                 square = self.board.squares[row][col]
                 if square.has_piece and square.piece is not None:
                     piece = square.piece
+                    # Don't draw the piece being dragged here
                     if piece is not self.dragger.piece:
                         piece.set_texture(size=80, theme_name=self.theme_name)
                         img = p.image.load(piece.texture)
@@ -86,16 +108,25 @@ class Game:
                         surface.blit(img, piece.texture_rect)
 
     def show_moves(self, surface) -> None:
+        """
+        Highlight all valid moves for the currently dragged piece.
+        Provides visual feedback to help players see legal moves.
+        """
         if not (self.dragger.dragging and self.dragger.piece):
             return
+        
         color = self.config.theme.move_highlight
         for move in self.dragger.piece.moves:
             row, col = move.final.row, move.final.col
             highlight_surface = p.Surface((SQ_SIZE, SQ_SIZE), p.SRCALPHA)
-            highlight_surface.fill((*color, 120))
+            highlight_surface.fill((*color, 120))  # Semi-transparent highlight
             surface.blit(highlight_surface, (col * SQ_SIZE, row * SQ_SIZE))
 
     def show_last_move(self, surface) -> None:
+        """
+        Highlight the squares involved in the last move made.
+        Helps players track the game progression and opponent moves.
+        """
         if not self.board.last_move:
             return
         theme = self.config.theme
@@ -108,6 +139,10 @@ class Game:
             surface.blit(highlight_surface, (col * SQ_SIZE, row * SQ_SIZE))
 
     def show_selected(self, surface) -> None:
+        """
+        Highlight the currently selected square where a piece is chosen to move from.
+        Provides clear indication to the player about their current selection.
+        """
         if not self.selected_square:
             return
         row, col = self.selected_square.row, self.selected_square.col
@@ -117,6 +152,10 @@ class Game:
         surface.blit(highlight_surface, (col * SQ_SIZE, row * SQ_SIZE))
 
     def show_hover(self, surface, mouse_pos) -> None:
+        """
+        Show a visual cue on the square under the mouse cursor.
+        Helps players identify where a piece will be dropped if dragged.
+        """
         col = mouse_pos[0] // SQ_SIZE
         row = mouse_pos[1] // SQ_SIZE
         color = self.config.theme.moves.light if (row + col) % 2 == 0 else self.config.theme.moves.dark
@@ -124,6 +163,10 @@ class Game:
         p.draw.rect(surface, color, rect, 3)
 
     def show_check(self, surface) -> None:
+        """
+        Draw a visual indicator (red ellipse) around the king if it's in check.
+        Provides a critical alert to the player about the king's safety.
+        """
         for row in range(ROWS):
             for col in range(COLS):
                 square = self.board.squares[row][col]
@@ -137,27 +180,45 @@ class Game:
                         return
 
     def next_turn(self) -> None:
+        """Switch the active player from white to black or black to white."""
         self.next_player = 'white' if self.next_player == 'black' else 'black'
         self.board.next_player = self.next_player  # Keep board in sync
 
     def change_theme(self) -> None:
+        """Cycle through available themes for the chess board and pieces."""
         self.config.change_themes()
     
     def play_sound(self, captured: bool=False) -> None:
+        """
+        Play sound effect for a move.
+        Distinguishes between regular move sound and capture sound.
+        """
         (self.config.capture_sound if captured else self.config.move_sound).play()
 
     def restart(self) -> None:
+        """Reset the game to the initial starting position."""
         self.load_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
 
     def fen_without_clocks(self, fen: str) -> str:
-        # Remove the last two fields (halfmove/fullmove)
+        """
+        Remove the move counters from the end of the FEN string.
+        Returns the FEN string without the halfmove and fullmove fields.
+        """
         return ' '.join(fen.split()[:4])
 
     def record_fen(self):
+        """
+        Record the current board position in FEN format to the history.
+        This allows undo functionality and threefold repetition detection.
+        """
         fen = FEN.get_fen(self.board)
         self.fen_history.append(fen)  # Store complete FEN for undo functionality
 
     def count_fen_occurrences(self, fen: str) -> int:
+        """
+        Count how many times a given FEN position (without clocks) has occurred in history.
+        Used to detect threefold repetition draws.
+        """
         fen_without_clocks = self.fen_without_clocks(fen)
         # Count occurrences in history by comparing without clocks
         count = 0
@@ -167,6 +228,10 @@ class Game:
         return count
 
     def is_threefold_repetition(self) -> bool:
+        """
+        Check if the current position has occurred three times in the game history.
+        This includes the current position and is used to detect draw conditions.
+        """
         fen = FEN.get_fen(self.board)
         fen = self.fen_without_clocks(fen)
         return self.count_fen_occurrences(fen) >= 3
@@ -207,6 +272,10 @@ class Game:
         return True
 
     def handle_mouse_down(self, pos) -> None:
+        """
+        Handle mouse button press events for selecting and dragging pieces.
+        Determines which square was clicked and initiates piece dragging if valid.
+        """
         dragger = self.dragger
         board = self.board
         dragger.update_mouse(pos)
@@ -227,6 +296,10 @@ class Game:
             dragger.undrag_piece(theme_name=self.theme_name)
 
     def handle_mouse_motion(self, pos, surface) -> None:
+        """
+        Handle mouse motion events during piece dragging.
+        Updates the display to show the piece being dragged and its valid movement squares.
+        """
         if self.dragger.dragging:
             self.dragger.update_mouse(pos)
             self.show_bg(surface)
@@ -239,6 +312,10 @@ class Game:
             self.dragger.update_blit(surface, theme_name=self.theme_name)
 
     def handle_mouse_up(self, pos, surface) -> None:
+        """
+        Handle mouse button release events to drop pieces on the board.
+        Validates the move, updates the game state, and plays the AI turn if applicable.
+        """
         dragger = self.dragger
         board = self.board
         if dragger.dragging:
@@ -270,7 +347,7 @@ class Game:
                     self.next_turn()
                     self.selected_square = None
 
-                    # RECORD FEN HERE
+                    # Record fen here
                     self.record_fen()
 
                     # Check for game over after the move
@@ -295,6 +372,10 @@ class Game:
             self.selected_square = None
 
     def prompt_promotion(self, surface, color: str) -> Piece:
+        """
+        Prompt the player to choose a piece for pawn promotion.
+        Displays options for queen, rook, bishop, and knight.
+        """
         font = p.font.SysFont('Arial', 32)
         options = [('Queen', 'Q'), ('Rook', 'R'), ('Bishop', 'B'), ('Knight', 'K')]
         selecting = True
@@ -327,6 +408,10 @@ class Game:
         return Queen(color)
     
     def AI_color_prompt(self) -> None:
+        """
+        Prompt the user to select the AI's color (white, black, or none).
+        Configures the game accordingly based on user input.
+        """
         screen = p.display.set_mode((WIDTH, HEIGHT))
         font = p.font.SysFont('Arial', 32)
         prompt = font.render("Press W for AI as White, B for AI as Black, N for no AI", True, (255, 255, 255))
@@ -359,6 +444,10 @@ class Game:
                         selecting = False
 
     def play_AI_turn(self, surface) -> None:
+        """
+        Execute a random valid move for the AI.
+        The AI's turn is played automatically after the human player.
+        """
         piece, move = self.ai.random_move(self.board) if self.ai else (None, None)
         if piece is not None and move is not None:
             captured = self.board.squares[move.final.row][move.final.col].has_enemy_piece(piece.color)
@@ -370,6 +459,10 @@ class Game:
             self.check_game_end()
     
     def show_end_screen(self, surface) -> None:
+        """
+        Display the end game screen with the result (checkmate, stalemate, etc.)
+        Provides an option to restart the game.
+        """
         font = p.font.SysFont('Arial', 48)
         text = font.render(self.end_message, True, (255, 255, 255))
         restart_text = font.render("Press R to Restart", True, (255, 255, 255))
@@ -378,6 +471,10 @@ class Game:
         surface.blit(restart_text, (WIDTH // 2 - restart_text.get_width() // 2, HEIGHT // 2 + 10))
 
     def check_game_end(self) -> None:
+        """
+        Check and update the game state for checkmate, stalemate, dead position,
+        fifty-move rule, and threefold repetition. Updates the end message and game_over flag.
+        """
         if self.board.is_checkmate(self.next_player):
             self.end_message = "Checkmate!"
             self.game_over = True
@@ -395,6 +492,10 @@ class Game:
             self.game_over = True
 
     def load_fen(self, fen: str) -> None:
+        """
+        Load a position from a FEN string and reset the game state accordingly.
+        Clears any existing selection and dragging, and resets the game over state.
+        """
         self.board.set_fen(fen)
         self.selected_square = None
         self.game_over = False

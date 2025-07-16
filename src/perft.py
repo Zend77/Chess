@@ -1,6 +1,7 @@
 """
 Perft (Performance Test) for chess engine verification.
-Compares move generation with Stockfish's perft results.
+Compares move generation with Stockfish's perft results to ensure the engine
+follows chess rules correctly and generates the exact same move counts.
 """
 
 import time
@@ -16,7 +17,9 @@ from rules import Rules
 class PerftTest:
     """
     Performance test class for chess move generation verification.
-    Generates move counts at various depths and compares with known results.
+    Generates move counts at various depths and compares with known results
+    from established chess engines like Stockfish. Essential for validating
+    that the engine correctly implements all chess rules.
     """
     
     def __init__(self):
@@ -25,42 +28,45 @@ class PerftTest:
         
     def perft(self, depth: int, board: Optional[Board] = None) -> int:
         """
-        Count all possible moves at given depth.
+        Count all possible legal moves at a given depth (leaf node counting).
+        This is the core perft function that recursively explores the game tree
+        and counts positions at the target depth.
         
         Args:
-            depth: Search depth
-            board: Board position (uses self.board if None)
+            depth: Search depth (number of moves to look ahead)
+            board: Board position to analyze (uses self.board if None)
             
         Returns:
-            Total number of leaf nodes at given depth
+            Total number of leaf nodes (positions) at the given depth
         """
         if board is None:
             board = self.board
             
         if depth == 0:
-            return 1
+            return 1  # Leaf node reached
             
         moves = self.generate_legal_moves(board)
         node_count = 0
         
         for move in moves:
-            # Make move
+            # Make the move on a copy of the board
             board_copy = self.copy_board(board)
             self.make_move(board_copy, move)
             
-            # Recurse
+            # Recursively count nodes from this position
             node_count += self.perft(depth - 1, board_copy)
             
         return node_count
     
     def perft_divide(self, depth: int, board: Optional[Board] = None) -> Tuple[Dict[str, int], int]:
         """
-        Perform perft with division - shows nodes for each root move.
-        This matches Stockfish's output format.
+        Perform perft with division - shows node count for each root move.
+        This is useful for debugging as it matches Stockfish's output format
+        and helps identify which specific moves are generating incorrect counts.
         
         Args:
             depth: Search depth
-            board: Board position (uses self.board if None)
+            board: Board position to analyze (uses self.board if None)
             
         Returns:
             Tuple of (dictionary mapping move notation to node count, total nodes)
@@ -73,11 +79,11 @@ class PerftTest:
         total_nodes = 0
         
         for move in moves:
-            # Make move
+            # Make the move on a copy of the board
             board_copy = self.copy_board(board)
             self.make_move(board_copy, move)
             
-            # Count nodes for this move
+            # Count nodes for this specific root move
             if depth <= 1:
                 nodes = 1
             else:
@@ -94,30 +100,34 @@ class PerftTest:
         return sorted_results, total_nodes
     
     def generate_legal_moves(self, board: Board) -> List[Move]:
-        """Generate all legal moves for current position."""
+        """
+        Generate all legal moves for the current player.
+        This combines pseudo-legal move generation with legality checking
+        to ensure no move leaves the king in check.
+        """
         pseudo_legal_moves = []
         
-        # Get all pseudo-legal moves
+        # Get all pseudo-legal moves for the current player's pieces
         for row in range(8):
             for col in range(8):
                 square = board.squares[row][col]
                 if square.has_piece and square.piece and square.piece.color == board.next_player:
                     piece_moves = Rules.generate_pseudo_legal_moves(board, square.piece, row, col)
                     
-                    # Add promotion moves for pawns
+                    # Handle pawn promotion - expand single moves into multiple promotion options
                     if isinstance(square.piece, Pawn):
                         piece_moves = self.expand_pawn_promotions(piece_moves, square.piece)
                     
                     pseudo_legal_moves.extend(piece_moves)
         
-        # Filter out illegal moves (moves that leave king in check)
+        # Filter out moves that would leave the king in check
         legal_moves = []
         for move in pseudo_legal_moves:
             board_copy = self.copy_board(board)
             original_player = board_copy.next_player  # Store the player before making the move
             self.make_move(board_copy, move)
             
-            # Find king of the player who just moved (original player)
+            # Check if the move leaves the player's own king in check
             king_pos = self.find_king(board_copy, original_player)
             if king_pos and not self.is_square_attacked(board_copy, king_pos[0], king_pos[1], 
                                                       'white' if original_player == 'black' else 'black'):
@@ -126,14 +136,17 @@ class PerftTest:
         return legal_moves
     
     def expand_pawn_promotions(self, moves: List[Move], pawn: Pawn) -> List[Move]:
-        """Expand pawn moves to include all promotion pieces."""
+        """
+        Expand pawn moves to include all four promotion options.
+        When a pawn reaches the opposite end, it can promote to queen, rook, bishop, or knight.
+        """
         expanded_moves = []
         
         for move in moves:
-            # Check if this is a promotion move
+            # Check if this move reaches the promotion rank
             if isinstance(pawn, Pawn) and (move.final.row == 0 or move.final.row == 7):
-                # Add all four promotion pieces
-                for promotion in ['q', 'r', 'b', 'n']:
+                # Create separate moves for each promotion piece
+                for promotion in ['q', 'r', 'b', 'n']:  # Queen, Rook, Bishop, Knight
                     promo_move = Move(move.initial, move.final, move.captured, promotion)
                     expanded_moves.append(promo_move)
             else:
@@ -142,10 +155,13 @@ class PerftTest:
         return expanded_moves
     
     def make_move(self, board: Board, move: Move) -> None:
-        """Make a move on the board."""
+        """
+        Execute a move on the board and switch the active player.
+        Handles promotion pieces if the move includes promotion notation.
+        """
         piece = board.squares[move.initial.row][move.initial.col].piece
         if piece:
-            # Create promotion piece if needed
+            # Create the promoted piece if this is a promotion move
             promotion_piece = None
             if move.promotion:
                 color = piece.color
@@ -158,30 +174,35 @@ class PerftTest:
                 elif move.promotion == 'n':
                     promotion_piece = Knight(color)
             
+            # Execute the move using the board's move method
             board.move(piece, move, promotion_piece=promotion_piece)
+            # Switch to the other player
             board.next_player = 'black' if board.next_player == 'white' else 'white'
     
     def copy_board(self, board: Board) -> Board:
-        """Create a deep copy of the board."""
+        """
+        Create a deep copy of the board for temporary move testing.
+        This is essential for perft to avoid modifying the original board state.
+        """
         new_board = Board()
         
-        # Copy all pieces more efficiently
+        # Copy all pieces with their current state
         for row in range(8):
             for col in range(8):
                 piece = board.squares[row][col].piece
                 if piece:
-                    # Create new piece of same type and color
+                    # Create a new piece of the same type and color
                     piece_type = type(piece)
                     new_piece = piece_type(piece.color)
-                    new_piece.moved = piece.moved
-                    # Copy any other important attributes
+                    new_piece.moved = piece.moved  # Important for castling and pawn moves
+                    # Copy any other piece-specific attributes
                     if hasattr(piece, 'en_passant'):
                         new_piece.en_passant = piece.en_passant
                     new_board.squares[row][col].piece = new_piece
                 else:
                     new_board.squares[row][col].piece = None
         
-        # Copy board state
+        # Copy all board state variables
         new_board.next_player = board.next_player
         new_board.castling_rights = board.castling_rights
         new_board.en_passant = board.en_passant
