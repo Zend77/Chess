@@ -304,8 +304,12 @@ class Board:
         return white_score, black_score
 
     def _create(self) -> None:
-        """Initialize the 8x8 board with empty squares."""
+        """Initialize the 8x8 board with empty squares and starting pieces."""
         self.squares = [[Square(row, col) for col in range(COLS)] for row in range(ROWS)]
+        
+        # Add starting pieces for both sides
+        self._add_pieces('white')
+        self._add_pieces('black')
 
     def _add_pieces(self, color: str) -> None:
         """
@@ -374,4 +378,118 @@ class Board:
 
         self.castling_rights = rights if rights else '-'
 
-        self.castling_rights = rights if rights else '-'
+    def copy(self) -> 'Board':
+        """
+        Create a deep copy of the board for move simulation.
+        Essential for minimax algorithm to test moves without affecting game state.
+        """
+        new_board = Board()
+        new_board.squares = [[Square(row, col) for col in range(COLS)] for row in range(ROWS)]
+        
+        # Copy all pieces and their states
+        for row in range(ROWS):
+            for col in range(COLS):
+                if self.squares[row][col].has_piece:
+                    original_piece = self.squares[row][col].piece
+                    if original_piece:
+                        # Create new piece of same type and copy its state
+                        piece_class = type(original_piece)
+                        new_piece = piece_class(original_piece.color)
+                        new_piece.moved = original_piece.moved
+                        new_piece.value = original_piece.value
+                        new_board.squares[row][col].piece = new_piece
+        
+        # Copy game state
+        new_board.last_move = self.last_move
+        new_board.halfmove_clock = self.halfmove_clock
+        new_board.fullmove_number = self.fullmove_number
+        new_board.next_player = self.next_player
+        new_board.castling_rights = self.castling_rights
+        new_board.en_passant = self.en_passant
+        
+        return new_board
+
+    def make_move_copy(self, piece: Piece, move: Move) -> 'Board':
+        """
+        Make a move on a copy of the board and return the new board state.
+        Used for AI move simulation and evaluation.
+        """
+        board_copy = self.copy()
+        piece_copy = board_copy.squares[move.initial.row][move.initial.col].piece
+        if piece_copy:
+            board_copy.move(piece_copy, move)
+            board_copy.next_player = 'black' if board_copy.next_player == 'white' else 'white'
+        return board_copy
+
+    def get_all_moves(self, color: str) -> list[tuple[Piece, Move]]:
+        """
+        Get all legal moves for a given color.
+        Returns list of (piece, move) tuples for AI move generation.
+        """
+        all_moves = []
+        for row in range(ROWS):
+            for col in range(COLS):
+                square = self.squares[row][col]
+                if square.has_piece and square.piece and square.piece.color == color:
+                    piece = square.piece
+                    self.calc_moves(piece, row, col, filter_checks=True)
+                    for move in piece.moves:
+                        all_moves.append((piece, move))
+        return all_moves
+
+    def get_piece_positions(self, color: str) -> dict[str, list[tuple[int, int]]]:
+        """
+        Get positions of all pieces for a given color.
+        Returns dict mapping piece names to list of (row, col) positions.
+        """
+        positions = {}
+        for row in range(ROWS):
+            for col in range(COLS):
+                square = self.squares[row][col]
+                if square.has_piece and square.piece and square.piece.color == color:
+                    piece_name = square.piece.name
+                    if piece_name not in positions:
+                        positions[piece_name] = []
+                    positions[piece_name].append((row, col))
+        return positions
+
+    def is_game_over(self) -> bool:
+        """Check if the game has ended (checkmate, stalemate, or draw)."""
+        return (self.is_checkmate(self.next_player) or 
+                self.is_stalemate(self.next_player) or 
+                self.is_dead_position() or 
+                self.is_fifty_move_rule())
+
+    def get_game_result(self) -> str:
+        """
+        Get the result of the game.
+        Returns: '1-0' (white wins), '0-1' (black wins), '1/2-1/2' (draw), '*' (ongoing)
+        """
+        if self.is_checkmate('white'):
+            return '0-1'
+        elif self.is_checkmate('black'):
+            return '1-0'
+        elif (self.is_stalemate('white') or self.is_stalemate('black') or 
+              self.is_dead_position() or self.is_fifty_move_rule()):
+            return '1/2-1/2'
+        else:
+            return '*'
+
+    def evaluate_position(self) -> float:
+        """
+        Basic position evaluation for AI.
+        Returns positive values for white advantage, negative for black advantage.
+        """
+        score = 0.0
+        
+        # Material evaluation
+        for row in range(ROWS):
+            for col in range(COLS):
+                square = self.squares[row][col]
+                if square.has_piece and square.piece:
+                    piece = square.piece
+                    # Use the piece's inherent value (already has color sign)
+                    if abs(piece.value) < 1000:  # Exclude king from material count
+                        score += piece.value
+        
+        return score

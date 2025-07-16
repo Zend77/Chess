@@ -1,4 +1,5 @@
 from typing import Any, Optional
+from square import Square
 
 class Move:
     """
@@ -31,3 +32,56 @@ class Move:
             self.final == other.final and 
             self.promotion == other.promotion
         )
+
+    def __hash__(self) -> int:
+        """
+        Hash function for move objects to enable use in sets and dictionaries.
+        Essential for transposition tables and move ordering.
+        """
+        return hash((
+            (self.initial.row, self.initial.col),
+            (self.final.row, self.final.col),
+            self.promotion
+        ))
+
+    def to_algebraic(self) -> str:
+        """
+        Convert move to algebraic notation (e.g., 'e2e4', 'e7e8q').
+        Useful for opening books and move logging.
+        """
+        initial_sq = f"{chr(ord('a') + self.initial.col)}{8 - self.initial.row}"
+        final_sq = f"{chr(ord('a') + self.final.col)}{8 - self.final.row}"
+        promotion = self.promotion if self.promotion else ""
+        return f"{initial_sq}{final_sq}{promotion}"
+
+    @classmethod
+    def from_algebraic(cls, notation: str, board) -> 'Move':
+        """
+        Create a move from algebraic notation.
+        Useful for parsing opening books and saved games.
+        """
+        if len(notation) < 4:
+            raise ValueError(f"Invalid move notation: {notation}")
+        
+        initial_col = ord(notation[0]) - ord('a')
+        initial_row = 8 - int(notation[1])
+        final_col = ord(notation[2]) - ord('a')
+        final_row = 8 - int(notation[3])
+        
+        promotion = notation[4] if len(notation) > 4 else None
+        captured = board.squares[final_row][final_col].piece if board else None
+        
+        return cls(
+            Square(initial_row, initial_col),
+            Square(final_row, final_col),
+            captured,
+            promotion
+        )
+
+    def is_capture(self) -> bool:
+        """Check if this move captures a piece."""
+        return self.captured is not None
+
+    def is_promotion(self) -> bool:
+        """Check if this move is a pawn promotion."""
+        return self.promotion is not None

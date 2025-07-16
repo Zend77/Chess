@@ -367,7 +367,6 @@ class Game:
                 
                 # Check if there's a captured piece
                 captured_piece = board.squares[released_row][released_col].piece if board.squares[released_row][released_col].has_piece else None
-                print(f"Captured piece: {captured_piece}")  # Debugging line
                 
                 # Check if this is a promotion move first
                 promotion_piece: Optional[Piece] = None
@@ -449,17 +448,28 @@ class Game:
     
     def AI_color_prompt(self) -> None:
         """
-        Prompt the user to select the AI's color (white, black, or none).
+        Prompt the user to select the AI's color and difficulty.
         Configures the game accordingly based on user input.
         """
         screen = p.display.set_mode((WIDTH, HEIGHT))
-        font = p.font.SysFont('Arial', 32)
-        prompt = font.render("Press W for AI as White, B for AI as Black, N for no AI", True, (255, 255, 255))
+        font = p.font.SysFont('Arial', 24)
+        title = p.font.SysFont('Arial', 32)
+        
+        # First select AI color
+        color_prompt = title.render("AI Color Selection", True, (255, 255, 255))
+        option1 = font.render("Press W for AI as White", True, (255, 255, 255))
+        option2 = font.render("Press B for AI as Black", True, (255, 255, 255))
+        option3 = font.render("Press N for no AI", True, (255, 255, 255))
 
-        selecting = True
-        while selecting:
+        ai_color = None
+        selecting_color = True
+        
+        while selecting_color:
             screen.fill((0, 0, 0))
-            screen.blit(prompt, (WIDTH // 2 - prompt.get_width() // 2, HEIGHT // 2))
+            screen.blit(color_prompt, (WIDTH // 2 - color_prompt.get_width() // 2, HEIGHT // 2 - 100))
+            screen.blit(option1, (WIDTH // 2 - option1.get_width() // 2, HEIGHT // 2 - 40))
+            screen.blit(option2, (WIDTH // 2 - option2.get_width() // 2, HEIGHT // 2))
+            screen.blit(option3, (WIDTH // 2 - option3.get_width() // 2, HEIGHT // 2 + 40))
             p.display.flip()
 
             for event in p.event.get():
@@ -468,27 +478,72 @@ class Game:
                     exit()
                 if event.type == p.KEYDOWN:
                     if event.key == p.K_w:
-                        self.ai = AI('white')
-                        self.ai_enabled = True
-                        print("AI will play as white.")
-                        selecting = False
+                        ai_color = 'white'
+                        selecting_color = False
                     elif event.key == p.K_b:
-                        self.ai = AI('black')
-                        self.ai_enabled = True
-                        print("AI will play as black.")
-                        selecting = False
+                        ai_color = 'black'
+                        selecting_color = False
                     elif event.key == p.K_n:
-                        self.ai = AI(self.next_player)  # Always have an AI instance
+                        self.ai = AI(self.next_player, "medium")  # Default difficulty
                         self.ai_enabled = False
                         print("No AI will play.")
-                        selecting = False
+                        return
+
+        # If AI was selected, choose difficulty
+        if ai_color:
+            difficulty_prompt = title.render("AI Difficulty Selection", True, (255, 255, 255))
+            diff1 = font.render("Press 1 for Easy (depth 3, 2s)", True, (255, 255, 255))
+            diff2 = font.render("Press 2 for Medium (depth 4, 5s)", True, (255, 255, 255))
+            diff3 = font.render("Press 3 for Hard (depth 6, 10s)", True, (255, 255, 255))
+            diff4 = font.render("Press 4 for Expert (depth 8, 20s)", True, (255, 255, 255))
+            diff5 = font.render("Press 5 for Master (depth 10, 30s)", True, (255, 255, 255))
+            diff6 = font.render("Press 6 for Grandmaster (depth 12, 60s)", True, (255, 255, 255))
+
+            selecting_difficulty = True
+            while selecting_difficulty:
+                screen.fill((0, 0, 0))
+                screen.blit(difficulty_prompt, (WIDTH // 2 - difficulty_prompt.get_width() // 2, HEIGHT // 2 - 150))
+                screen.blit(diff1, (WIDTH // 2 - diff1.get_width() // 2, HEIGHT // 2 - 100))
+                screen.blit(diff2, (WIDTH // 2 - diff2.get_width() // 2, HEIGHT // 2 - 70))
+                screen.blit(diff3, (WIDTH // 2 - diff3.get_width() // 2, HEIGHT // 2 - 40))
+                screen.blit(diff4, (WIDTH // 2 - diff4.get_width() // 2, HEIGHT // 2 - 10))
+                screen.blit(diff5, (WIDTH // 2 - diff5.get_width() // 2, HEIGHT // 2 + 20))
+                screen.blit(diff6, (WIDTH // 2 - diff6.get_width() // 2, HEIGHT // 2 + 50))
+                p.display.flip()
+
+                for event in p.event.get():
+                    if event.type == p.QUIT:
+                        p.quit()
+                        exit()
+                    if event.type == p.KEYDOWN:
+                        difficulty_map = {
+                            p.K_1: "easy",
+                            p.K_2: "medium", 
+                            p.K_3: "hard",
+                            p.K_4: "expert",
+                            p.K_5: "master",
+                            p.K_6: "grandmaster"
+                        }
+                        if event.key in difficulty_map:
+                            difficulty = difficulty_map[event.key]
+                            self.ai = AI(ai_color, difficulty)
+                            self.ai_enabled = True
+                            print(f"AI will play as {ai_color} with {difficulty} difficulty.")
+                            selecting_difficulty = False
 
     def play_AI_turn(self, surface) -> None:
         """
-        Execute a random valid move for the AI.
+        Execute the best move found by the AI using minimax algorithm.
         The AI's turn is played automatically after the human player.
         """
-        piece, move = self.ai.random_move(self.board) if self.ai else (None, None)
+        if not self.ai:
+            return
+            
+        print(f"\n=== AI Turn ({self.ai.color}) ===")
+        
+        # Get AI's best move using advanced search
+        piece, move = self.ai.get_best_move(self.board)
+        
         if piece is not None and move is not None:
             captured = self.board.squares[move.final.row][move.final.col].has_enemy_piece(piece.color)
             self.board.move(piece, move, surface)
@@ -496,6 +551,15 @@ class Game:
             self.next_turn()
             # RECORD FEN HERE
             self.record_fen()
+            self.check_game_end()
+            
+            # Show position analysis after AI move
+            analysis = self.ai.analyze_position(self.board)
+            print(f"Position analysis: {analysis['evaluation']:+.2f} pawns")
+            print(f"Game phase: {analysis['game_phase']}")
+            print(f"Position type: {analysis['position_type']}")
+        else:
+            print("AI has no legal moves - game should be over")
             self.check_game_end()
     
     def show_end_screen(self, surface) -> None:
