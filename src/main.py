@@ -78,6 +78,8 @@ class Main:
                         game = self.game
                     elif event.key == p.K_LEFT:
                         game.undo_move()  # Undo the last move
+                    elif event.key == p.K_RIGHT:
+                        game.redo_move()  # Redo the last undone move
                     elif event.key == p.K_g and not game.game_over:
                         # Toggle AI opponent on/off
                         game.ai_enabled = not game.ai_enabled

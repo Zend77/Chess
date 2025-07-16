@@ -29,6 +29,7 @@ class Game:
     dragger: Dragger
     config: Config
     fen_history: list[str]
+    redo_history: list[str]  # Track undone positions for redo functionality
 
     def __init__(self):
         self.next_player = 'white'  # White always moves first in chess
@@ -45,6 +46,7 @@ class Game:
         self.dragger = Dragger()  # Handles drag-and-drop piece movement
         self.config = Config()  # Visual themes and settings
         self.fen_history: list[str] = []  # Track position history for threefold repetition
+        self.redo_history: list[str] = []  # Track undone positions for redo functionality
         self.record_fen()
 
     @property
@@ -213,6 +215,8 @@ class Game:
         """
         fen = FEN.get_fen(self.board)
         self.fen_history.append(fen)  # Store complete FEN for undo functionality
+        # Clear redo history when a new move is made
+        self.redo_history.clear()
 
     def count_fen_occurrences(self, fen: str) -> int:
         """
@@ -246,8 +250,9 @@ class Game:
             print("No moves to undo")
             return False
         
-        # Remove current position
-        self.fen_history.pop()
+        # Save current position to redo history before undoing
+        current_fen = self.fen_history.pop()
+        self.redo_history.append(current_fen)
         
         # Get previous position
         previous_fen = self.fen_history[-1]
@@ -269,6 +274,40 @@ class Game:
         self.draw_offered = False
         
         print(f"Move undone. Next player: {self.next_player}. Position restored to: {previous_fen}")
+        return True
+
+    def redo_move(self) -> bool:
+        """
+        Redo a previously undone move by restoring it from the redo history.
+        Returns True if redo was successful, False if no moves to redo.
+        """
+        # Need at least 1 position in redo history
+        if len(self.redo_history) < 1:
+            print("No moves to redo")
+            return False
+        
+        # Get the next position to redo
+        next_fen = self.redo_history.pop()
+        
+        # Add it back to the main history
+        self.fen_history.append(next_fen)
+        
+        # Restore the board state
+        self.board.set_fen(next_fen)
+        
+        # Clear any selected squares and dragging state
+        self.selected_square = None
+        self.dragger.undrag_piece(theme_name=self.theme_name)
+        
+        # Update next player based on the restored position
+        self.next_player = self.board.next_player
+        
+        # Clear any game over state in case we're redoing the final move
+        self.game_over = False
+        self.end_message = ""
+        self.draw_offered = False
+        
+        print(f"Move redone. Next player: {self.next_player}. Position restored to: {next_fen}")
         return True
 
     def handle_mouse_down(self, pos) -> None:
@@ -328,6 +367,7 @@ class Game:
                 
                 # Check if there's a captured piece
                 captured_piece = board.squares[released_row][released_col].piece if board.squares[released_row][released_col].has_piece else None
+                print(f"Captured piece: {captured_piece}")  # Debugging line
                 
                 # Check if this is a promotion move first
                 promotion_piece: Optional[Piece] = None
@@ -503,6 +543,7 @@ class Game:
         self.draw_offered = False
         self.dragger.undrag_piece(theme_name=self.theme_name)
         self.fen_history = []
+        self.redo_history = []  # Clear redo history on new position
         self.record_fen()
 
     def show_perft_result(self, surface, depth: int = 2) -> None:
