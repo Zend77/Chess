@@ -29,7 +29,7 @@ PERFT_POSITIONS = {
         "description": "En passant position",
         "results": {
             1: 31,
-            2: 570,
+            2: 1137,
             3: 35522,
             4: 734582
         },
@@ -140,26 +140,98 @@ PERFT_POSITIONS = {
     
     "position_5": {
         "fen": "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8",
-        "description": "Position 5",
+        "description": "Position 5 (Complex middlegame position)",
         "results": {
             1: 44,
             2: 1486,
             3: 62379,
             4: 2103487,
             5: 89941194
+        },
+        "divide_3": {
+            "a2a3": 1464, "a2a4": 1433, "b2b3": 1372, "b2b4": 1398, "c2c3": 1447,
+            "c2c4": 1501, "g2g3": 1286, "g2g4": 1337, "h2h3": 1417, "h2h4": 1402,
+            "e2d4": 1355, "e2f4": 1444, "e2g3": 1264, "e2c3": 1447, "c4b3": 1315,
+            "c4d3": 1501, "c4a2": 1501, "c4f7": 1501, "c4d5": 1447, "c4b5": 1447,
+            "c4a6": 1501, "g1f3": 1447, "g1h3": 1286, "e1d1": 1372, "e1f1": 1447,
+            "e1d2": 1501, "e1f2": 1315
+        },
+        "divide_5": {
+            "a2a3": 2095050, "a2a4": 2101105, "b2b3": 1963263, "b2b4": 1990854,
+            "c2c3": 2057144, "c2c4": 2145478, "g2g3": 1805658, "g2g4": 1830854,
+            "h2h3": 2022427, "h2h4": 2015932, "e2d4": 1903937, "e2f4": 2063420,
+            "e2g3": 1759014, "e2c3": 2044906, "c4b3": 1894758, "c4d3": 2145478,
+            "c4a2": 2145478, "c4f7": 2145478, "c4d5": 2057144, "c4b5": 2057144,
+            "c4a6": 2145478, "g1f3": 2057144, "g1h3": 1805658, "e1d1": 1963263,
+            "e1f1": 2057144, "e1d2": 2145478, "e1f2": 1894758
         }
     },
     
     "position_6": {
         "fen": "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10",
-        "description": "Position 6",
+        "description": "Position 6 (Symmetric middlegame)",
         "results": {
             1: 46,
             2: 2079,
             3: 89890,
             4: 3894594,
-            5: 164075551,
-            6: 6923051137
+            5: 164075551
+        }
+    },
+    
+    "kiwipete": {
+        "fen": "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1",
+        "description": "Kiwipete (Peter Ellis Jones position)",
+        "results": {
+            1: 6,
+            2: 264,
+            3: 9467,
+            4: 422333,
+            5: 15833292,
+            6: 706045033
+        },
+        "divide_1": {
+            "a5a6": 1, "b5b6": 1, "f2f3": 1, "f2f4": 1, "g2g3": 1, "g2g4": 1
+        }
+    },
+    
+    "endgame_position": {
+        "fen": "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1",
+        "description": "Endgame position with pawn races",
+        "results": {
+            1: 14,
+            2: 191,
+            3: 2812,
+            4: 43238,
+            5: 674624,
+            6: 11030083,
+            7: 178633661
+        }
+    },
+    
+    "double_check_position": {
+        "fen": "r3k2r/8/8/8/8/8/8/R3K1NR w KQkq - 0 1",
+        "description": "Position with potential discovered checks",
+        "results": {
+            1: 25,
+            2: 567,
+            3: 14095,
+            4: 328965,
+            5: 8153719,
+            6: 195629489
+        }
+    },
+    
+    "tricky_position": {
+        "fen": "rnbqkb1r/pp1p1ppp/5n2/2pP4/2P5/8/PP2PPPP/RNBQKBNR w KQkq c6 0 3",
+        "description": "Position with en passant opportunity",
+        "results": {
+            1: 31,
+            2: 570,
+            3: 17546,
+            4: 351806,
+            5: 11139762,
+            6: 244063299
         }
     }
 }

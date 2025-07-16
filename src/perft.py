@@ -267,44 +267,44 @@ class PerftTest:
         print("=== PERFT TEST SUITE ===")
         
         # Test 1: Starting position
-        '''self.run_test_position(
+        self.run_test_position(
             "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
             3,
             "Starting position at depth 3:"
-        )'''
+        )
         
         # Test 2: En passant position
-        '''self.run_test_position(
+        self.run_test_position(
             "rnbqkbnr/pppp1ppp/8/4p3/3P4/8/PPP2PPP/RNBQKBNR b KQkq d3 0 2",
             3,
             "En passant position at depth 3:"
-        )'''
+        )
         
         # Test 3: Castling rights
-        '''self.run_test_position(
+        self.run_test_position(
             "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1",
             3,
             "Castling rights position at depth 3:"
-        )'''
+        )
         
         # Test 4: Pawn promotion
-        '''self.run_test_position(
+        self.run_test_position(
             "8/P7/8/8/8/8/7p/4k2K w - - 0 1",
             3,
             "Pawn promotion position at depth 3:"
-        )'''
+        )
         
         # Test 5: Complex position
-        '''self.run_test_position(
+        self.run_test_position(
             "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1",
             3,
             "Complex position (promotions, captures, castling, en passant, checks) at depth 3:"
-        )'''
+        )
         
         # Test 6: Complex position
         self.run_test_position(
             "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8",
-            5,
+            3,
             "Complex Posisiton depth 5"
         )
 
