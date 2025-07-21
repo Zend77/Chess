@@ -55,6 +55,7 @@ class Search:
         self.killer_moves.clear()
         
         best_result = SearchResult()
+        previous_score = None  # Track previous depth's score for bug detection
         
         # Always try at least depth 1 to ensure we have some move
         for current_depth in range(1, depth + 1):
@@ -71,6 +72,22 @@ class Search:
                     best_result.depth = current_depth
                     
                 print(f"Depth {current_depth}: {result.score/100.0:+.2f} pawns - {result.best_move.to_algebraic() if result.best_move else 'None'}")
+                
+                # IMPROVED DEBUGGING: Only flag as bug if scores get significantly WORSE at deeper depths
+                # It's normal for Black to choose moves that are positive (bad for Black) if they're the best available
+                # The bug is when deeper search makes BLACK choose WORSE moves (higher positive scores)
+                if (board.next_player == 'black' and 
+                    current_depth > 1 and 
+                    previous_score is not None):
+                    
+                    score_change = result.score - previous_score
+                    if score_change > 200:  # Score got 2+ pawns worse for Black
+                        print(f"  🚨 POTENTIAL BUG: Black's score got {score_change/100.0:.2f} pawns WORSE at depth {current_depth}")
+                        print(f"  🚨 Previous: {previous_score/100.0:+.2f}, Current: {result.score/100.0:+.2f}")
+                        print(f"  🚨 This suggests search is optimizing for White instead of Black!")
+                
+                # Store current score for next iteration comparison
+                previous_score = result.score
                 
                 # Debug: Show if the move changed between depths
                 if best_result.best_move and result.best_move:
@@ -128,16 +145,16 @@ class Search:
             
             try:
                 # After making the move, the position is evaluated from white's perspective
-                # But we need to continue the search from the opponent's perspective
+                # But we need to continue the search from the opponent's perspective with proper bounds
                 if current_player == 'white':
                     # White made a move, now it's black's turn to respond (minimize)
-                    score = self._minimax(board, depth - 1, -inf, inf, False)
+                    score = self._minimax(board, depth - 1, -inf, inf, False, allow_null=True)
                     if score > best_score:
                         best_score = score
                         best_move = move
                 else:
                     # Black made a move, now it's white's turn to respond (maximize)  
-                    score = self._minimax(board, depth - 1, -inf, inf, True)
+                    score = self._minimax(board, depth - 1, -inf, inf, True, allow_null=True)
                     if score < best_score:
                         best_score = score
                         best_move = move
@@ -154,9 +171,9 @@ class Search:
         # the score as-is (it's already in the right perspective)
         return SearchResult(best_move, best_score, depth)
     
-    def _minimax(self, board: Board, depth: int, alpha: float, beta: float, maximizing: bool) -> float:
+    def _minimax(self, board: Board, depth: int, alpha: float, beta: float, maximizing: bool, allow_null: bool = True) -> float:
         """
-        Minimax algorithm with alpha-beta pruning.
+        Minimax algorithm with alpha-beta pruning, null move pruning, and late move reductions.
         
         Args:
             board: Current board position
@@ -164,13 +181,18 @@ class Search:
             alpha: Alpha value for pruning
             beta: Beta value for pruning
             maximizing: True if maximizing player (white), False for minimizing (black)
+            allow_null: True if null move pruning is allowed (prevents double null moves)
             
         Returns:
             Evaluation score of the position
         """
         self.nodes_searched += 1
         
-        # Check transposition table (re-enabled with optimizations)
+        # FAIL-SAFE: Prevent infinite recursion
+        if depth < 0:
+            return Evaluation.evaluate(board)
+        
+        # Check transposition table - RE-ENABLED with careful sign handling
         board_hash = self._hash_board_fast(board)
         if board_hash in self.transposition_table:
             entry = self.transposition_table[board_hash]
@@ -179,8 +201,9 @@ class Search:
         
         # Terminal conditions
         if depth == 0:
-            # Use simple quiescence for tactical awareness
-            score = self._quiescence_search_simple(board, alpha, beta, maximizing)
+            # SIMPLIFIED: Direct evaluation instead of expensive quiescence
+            # The quiescence search was calling get_all_moves() which is very slow
+            score = Evaluation.evaluate(board)
             self._store_transposition_simple(board_hash, depth, score)
             return score
         
@@ -204,6 +227,42 @@ class Search:
                 self._store_transposition_simple(board_hash, depth, 0)
                 return 0  # Stalemate or draw
         
+        # Null Move Pruning - RE-ENABLED with proper sign handling
+        current_player = 'white' if maximizing else 'black'
+        in_check = board.in_check_king(current_player)
+        
+        if (allow_null and 
+            depth >= 3 and 
+            not in_check and 
+            not self._is_endgame(board)):
+            
+            # Get current evaluation to see if position is promising
+            current_eval = Evaluation.evaluate(board)
+            # Convert to current player's perspective
+            if not maximizing:  # Black's turn
+                current_eval = -current_eval
+            
+            # Only try null move if position looks good (above beta)
+            if current_eval >= beta:
+                # Make null move
+                original_player = self._make_null_move(board)
+                
+                try:
+                    # Search with reduced depth and narrow window
+                    # FIXED: Remove the incorrect negation - minimax returns values from White's perspective
+                    null_score = self._minimax(board, depth - 3, -beta, -beta + 1, not maximizing, allow_null=False)
+                except TimeoutError:
+                    # Unmake null move on timeout
+                    self._unmake_null_move(board, original_player)
+                    raise
+                
+                # Unmake null move
+                self._unmake_null_move(board, original_player)
+                
+                # Null move cutoff
+                if null_score >= beta:
+                    return beta
+        
         moves = self._get_ordered_moves(board, current_player)
         
         if not moves:
@@ -214,35 +273,81 @@ class Search:
         best_score = -inf if maximizing else inf
         
         if maximizing:
-            for piece, move in moves:
+            for move_index, (piece, move) in enumerate(moves):
+                # CLEAN ALPHA-BETA WITH LMR
+                # Determine if this move is dangerous (shouldn't be reduced)
+                is_dangerous = self._is_dangerous_move(board, piece, move)
+                
+                # Calculate Late Move Reduction amount
+                reduction = self._calculate_lmr_reduction(move_index, depth, is_dangerous)
+                # Ensure depth always decreases by at least 1
+                search_depth = max(0, depth - 1 - reduction)
+                
                 move_info = board.make_move_fast(piece, move)
                 try:
-                    eval_score = self._minimax(board, depth - 1, alpha, beta, False)
+                    # WHITE's turn (maximizing): after move, BLACK responds (minimizing)
+                    eval_score = self._minimax(board, search_depth, alpha, beta, False, allow_null=True)
+                    
+                    # LMR Re-search: Only if we got a really good score and used reduction
+                    if reduction > 0 and eval_score > alpha and search_depth < depth - 1:
+                        # Re-search at full depth if the reduced search found a good move
+                        eval_score = self._minimax(board, depth - 1, alpha, beta, False, allow_null=True)
+                    
                 except TimeoutError:
                     board.unmake_move_fast(piece, move, move_info)
                     raise
                 board.unmake_move_fast(piece, move, move_info)
                 
-                best_score = max(best_score, eval_score)
-                alpha = max(alpha, eval_score)
-                if beta <= alpha:
+                # Update best score for maximizing player
+                if eval_score > best_score:
+                    best_score = eval_score
+                
+                # Alpha-beta pruning: update alpha
+                if eval_score > alpha:
+                    alpha = eval_score
+                    
+                # Beta cutoff: if alpha >= beta, prune remaining moves
+                if alpha >= beta:
                     # Store killer move for non-captures
                     if not move.is_capture():
                         self._store_killer_move(move, depth)
                     break  # Beta cutoff
         else:
-            for piece, move in moves:
+            for move_index, (piece, move) in enumerate(moves):
+                # CLEAN ALPHA-BETA WITH LMR
+                # Determine if this move is dangerous (shouldn't be reduced)
+                is_dangerous = self._is_dangerous_move(board, piece, move)
+                
+                # Calculate Late Move Reduction amount
+                reduction = self._calculate_lmr_reduction(move_index, depth, is_dangerous)
+                # Ensure depth always decreases by at least 1
+                search_depth = max(0, depth - 1 - reduction)
+                
                 move_info = board.make_move_fast(piece, move)
                 try:
-                    eval_score = self._minimax(board, depth - 1, alpha, beta, True)
+                    # BLACK's turn (minimizing): after move, WHITE responds (maximizing)
+                    eval_score = self._minimax(board, search_depth, alpha, beta, True, allow_null=True)
+                    
+                    # LMR Re-search: Only if we got a really good score and used reduction
+                    if reduction > 0 and eval_score < beta and search_depth < depth - 1:
+                        # Re-search at full depth if the reduced search found a good move
+                        eval_score = self._minimax(board, depth - 1, alpha, beta, True, allow_null=True)
+                    
                 except TimeoutError:
                     board.unmake_move_fast(piece, move, move_info)
                     raise
                 board.unmake_move_fast(piece, move, move_info)
                 
-                best_score = min(best_score, eval_score)
-                beta = min(beta, eval_score)
-                if beta <= alpha:
+                # Update best score for minimizing player
+                if eval_score < best_score:
+                    best_score = eval_score
+                
+                # Alpha-beta pruning: update beta
+                if eval_score < beta:
+                    beta = eval_score
+                    
+                # Alpha cutoff: if alpha >= beta, prune remaining moves
+                if alpha >= beta:
                     # Store killer move for non-captures
                     if not move.is_capture():
                         self._store_killer_move(move, depth)
@@ -645,3 +750,84 @@ class Search:
     def _is_square_defended_by_color(self, board: Board, row: int, col: int, by_color: str) -> bool:
         """Check if a square is defended by any piece of the given color."""
         return self._is_square_attacked_by_color(board, row, col, by_color)
+    
+    def _is_endgame(self, board: Board) -> bool:
+        """
+        Detect endgame positions to avoid null move pruning in zugzwang positions.
+        Simple heuristic: endgame if both sides have <= 13 points of material (excluding kings).
+        """
+        white_material = black_material = 0
+        material_values = {'queen': 9, 'rook': 5, 'bishop': 3, 'knight': 3, 'pawn': 1}
+        
+        for row in range(8):
+            for col in range(8):
+                piece = board.squares[row][col].piece
+                if piece and piece.name != 'king':
+                    value = material_values.get(piece.name, 0)
+                    if piece.color == 'white':
+                        white_material += value
+                    else:
+                        black_material += value
+        
+        # Endgame if both sides have low material
+        return white_material <= 13 and black_material <= 13
+    
+    def _is_dangerous_move(self, board: Board, piece: Piece, move: Move) -> bool:
+        """
+        Check if a move should avoid Late Move Reduction.
+        Dangerous moves include: captures, checks, promotions, killer moves, and important pieces.
+        """
+        # Always search captures at full depth
+        if move.is_capture():
+            return True
+        
+        # Always search promotions at full depth
+        if hasattr(move, 'promotion') and move.promotion:
+            return True
+        
+        # Check if move gives check (requires temporary move)
+        if self._gives_check(board, piece, move):
+            return True
+        
+        # IMPORTANT: Don't reduce queen moves - they're often critical
+        if piece.name == 'queen':
+            return True
+        
+        # Don't reduce king moves - always critical for safety
+        if piece.name == 'king':
+            return True
+        
+        # Check if it's a killer move (stored from previous searches)
+        # You could enhance this by checking against stored killer moves
+        
+        return False
+    
+    def _calculate_lmr_reduction(self, move_index: int, depth: int, is_dangerous: bool) -> int:
+        """
+        Calculate Late Move Reduction amount based on move characteristics.
+        Returns the reduction amount (0 = no reduction, 1+ = reduce by this amount).
+        """
+        if is_dangerous or move_index < 4:  # Don't reduce first 4 moves or dangerous moves
+            return 0
+        
+        if depth < 3:  # Don't reduce in shallow searches
+            return 0
+        
+        # Progressive reduction: later moves get reduced more
+        # Logarithmic reduction to avoid over-reducing
+        if move_index < 8:
+            return 1  # Small reduction for moves 4-7
+        elif move_index < 16:
+            return 2  # Medium reduction for moves 8-15
+        else:
+            return min(3, depth // 2)  # Larger reduction for later moves
+    
+    def _make_null_move(self, board: Board) -> str:
+        """Make a null move (just switch the current player)."""
+        original_player = board.next_player
+        board.next_player = 'black' if board.next_player == 'white' else 'white'
+        return original_player
+    
+    def _unmake_null_move(self, board: Board, original_player: str) -> None:
+        """Unmake a null move (restore the original player)."""
+        board.next_player = original_player

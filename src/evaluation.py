@@ -105,30 +105,31 @@ class Evaluation:
     @staticmethod
     def evaluate(board) -> float:
         """
-        Comprehensive position evaluation with multiple factors.
+        IMPROVED evaluation with essential chess knowledge.
         Returns value in centipawns from white's perspective.
         """
         score = 0.0
         
-        # Determine game phase for evaluation weighting
-        game_phase = Evaluation._get_game_phase(board)
-        
         # Core evaluations
         score += Evaluation.evaluate_material(board)
-        score += Evaluation.evaluate_position(board, game_phase) * 0.1  # Drastically reduced positional weight
-        score += Evaluation.evaluate_mobility(board) * 0.1
-        score += Evaluation.evaluate_king_safety(board, game_phase)
-        score += Evaluation.evaluate_pawn_structure(board)
-        score += Evaluation.evaluate_piece_coordination(board)
-        score += Evaluation.evaluate_tactical_themes(board) * 3.0  # Much higher tactical weight
         
-        # Endgame-specific evaluation
-        if game_phase == 'endgame':
-            score += Evaluation.evaluate_endgame_factors(board)
+        # Determine game phase for tactical evaluation
+        game_phase = Evaluation._get_game_phase(board)
+        score += Evaluation.evaluate_position(board, game_phase) * 0.5
         
-        # Opening-specific penalties (especially early queen development)
-        if game_phase == 'opening':
-            score += Evaluation.evaluate_opening_principles(board) * 2.0  # Double weight for opening principles
+        # Add back ESSENTIAL evaluations (but lightweight versions):
+        
+        # King safety (very important for tactical soundness)
+        if game_phase in ['opening', 'middlegame']:
+            score += Evaluation.evaluate_king_safety(board, game_phase) * 0.3  # Reduced weight
+        
+        # Basic pawn structure (important for positional understanding)
+        score += Evaluation.evaluate_pawn_structure(board) * 0.3  # Reduced weight
+        
+        # Skip the most expensive ones:
+        # - evaluate_mobility (VERY EXPENSIVE - generates all moves)
+        # - evaluate_piece_coordination (expensive piece analysis) 
+        # - evaluate_tactical_themes (very expensive pattern matching)
         
         return score
     
