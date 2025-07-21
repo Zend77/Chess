@@ -86,15 +86,23 @@ class Search:
     def _minimax_root(self, board: Board, depth: int) -> SearchResult:
         """Root minimax call for the current player."""
         best_move = None
-        best_score = -inf if board.next_player == 'white' else inf
+        current_player = board.next_player  # Store BEFORE making moves
         
-        moves = self._get_ordered_moves(board, board.next_player)
+        # Since evaluation is always from white's perspective:
+        # - White wants to MAXIMIZE the evaluation score
+        # - Black wants to MINIMIZE the evaluation score  
+        if current_player == 'white':
+            best_score = -inf  # White maximizes
+        else:
+            best_score = inf   # Black minimizes
+        
+        moves = self._get_ordered_moves(board, current_player)
         
         if not moves:
             # No legal moves available
-            if board.in_check_king(board.next_player):
-                # Checkmate
-                score = -20000 if board.next_player == 'white' else 20000
+            if board.in_check_king(current_player):
+                # Checkmate - bad for current player
+                score = -20000 if current_player == 'white' else 20000
             else:
                 # Stalemate
                 score = 0
@@ -104,20 +112,30 @@ class Search:
             if self._should_stop():
                 raise TimeoutError("Search time limit exceeded")
             
-            # Make move on copy
-            new_board = board.make_move_copy(piece, move)
+            # Use fast make/unmake instead of board copying
+            move_info = board.make_move_fast(piece, move)
             
-            if board.next_player == 'white':
-                score = self._minimax(new_board, depth - 1, -inf, inf, False)
+            # After making the move, the position is evaluated from white's perspective
+            # But we need to continue the search from the opponent's perspective
+            if current_player == 'white':
+                # White made a move, now it's black's turn to respond (minimize)
+                score = self._minimax(board, depth - 1, -inf, inf, False)
                 if score > best_score:
                     best_score = score
                     best_move = move
             else:
-                score = self._minimax(new_board, depth - 1, -inf, inf, True)
+                # Black made a move, now it's white's turn to respond (maximize)  
+                score = self._minimax(board, depth - 1, -inf, inf, True)
                 if score < best_score:
                     best_score = score
                     best_move = move
+            
+            # Undo the move
+            board.unmake_move_fast(piece, move, move_info)
         
+        # CRITICAL FIX: Return the score from the correct perspective
+        # Since evaluation is always from white's perspective, we need to return
+        # the score as-is (it's already in the right perspective)
         return SearchResult(best_move, best_score, depth)
     
     def _minimax(self, board: Board, depth: int, alpha: float, beta: float, maximizing: bool) -> float:
@@ -150,7 +168,7 @@ class Search:
         
         # Terminal conditions
         if depth == 0:
-            score = self._quiescence_search(board, alpha, beta, maximizing, 3)
+            score = Evaluation.evaluate(board)  # Direct evaluation instead of quiescence
             self._store_transposition(board_hash, depth, score, 'exact')
             return score
         
@@ -179,8 +197,10 @@ class Search:
         
         if maximizing:
             for piece, move in moves:
-                new_board = board.make_move_copy(piece, move)
-                eval_score = self._minimax(new_board, depth - 1, alpha, beta, False)
+                move_info = board.make_move_fast(piece, move)
+                eval_score = self._minimax(board, depth - 1, alpha, beta, False)
+                board.unmake_move_fast(piece, move, move_info)
+                
                 best_score = max(best_score, eval_score)
                 alpha = max(alpha, eval_score)
                 if beta <= alpha:
@@ -190,8 +210,10 @@ class Search:
                     break  # Beta cutoff
         else:
             for piece, move in moves:
-                new_board = board.make_move_copy(piece, move)
-                eval_score = self._minimax(new_board, depth - 1, alpha, beta, True)
+                move_info = board.make_move_fast(piece, move)
+                eval_score = self._minimax(board, depth - 1, alpha, beta, True)
+                board.unmake_move_fast(piece, move, move_info)
+                
                 best_score = min(best_score, eval_score)
                 beta = min(beta, eval_score)
                 if beta <= alpha:
@@ -272,8 +294,9 @@ class Search:
         captures.sort(key=lambda x: self._mvv_lva_score(x[1]), reverse=True)
         
         for piece, move in captures:
-            new_board = board.make_move_copy(piece, move)
-            score = self._quiescence_search(new_board, alpha, beta, not maximizing, depth - 1)
+            move_info = board.make_move_fast(piece, move)
+            score = self._quiescence_search(board, alpha, beta, not maximizing, depth - 1)
+            board.unmake_move_fast(piece, move, move_info)
             
             if maximizing:
                 alpha = max(alpha, score)
@@ -287,38 +310,24 @@ class Search:
         return alpha if maximizing else beta
     
     def _get_ordered_moves(self, board: Board, color: str) -> List[Tuple[Piece, Move]]:
-        """Get moves ordered for better alpha-beta pruning with improved move ordering."""
+        """Get moves ordered for better alpha-beta pruning - SIMPLIFIED VERSION."""
         moves = board.get_all_moves(color)
         
         if not moves:
             return []
         
-        # Categorize moves for better ordering
+        # Simple ordering: captures first, then others
         captures = []
-        killer_moves_list = []
         other_moves = []
         
         for piece, move in moves:
-            move_score = self._calculate_move_score(board, piece, move)
-            
             if move.is_capture():
-                captures.append((piece, move, move_score))
-            elif self._is_killer_move(move):
-                killer_moves_list.append((piece, move, move_score))
+                captures.append((piece, move))
             else:
-                other_moves.append((piece, move, move_score))
+                other_moves.append((piece, move))
         
-        # Sort each category by score (highest first)
-        captures.sort(key=lambda x: x[2], reverse=True)
-        killer_moves_list.sort(key=lambda x: x[2], reverse=True)
-        other_moves.sort(key=lambda x: x[2], reverse=True)
-        
-        # Combine in order: captures, killers, others
-        ordered_moves = []
-        for piece, move, score in captures + killer_moves_list + other_moves:
-            ordered_moves.append((piece, move))
-        
-        return ordered_moves
+        # Simple ordering - no expensive evaluation
+        return captures + other_moves
     
     def _calculate_move_score(self, board: Board, piece: Piece, move: Move) -> float:
         """Calculate a score for move ordering."""
@@ -334,6 +343,12 @@ class Search:
         # Promotions
         if move.is_promotion():
             score += 900  # High value for promotions
+        
+        # SAFETY CHECK: Heavily penalize moves that put pieces in danger
+        if self._move_puts_piece_in_danger(board, piece, move):
+            from evaluation import Evaluation
+            piece_value = Evaluation.PIECE_VALUES.get(piece.name, 0)
+            score -= piece_value * 0.9  # 90% penalty for dangerous moves
         
         # Center control bonus
         if self._is_center_move(move):
@@ -462,11 +477,81 @@ class Search:
     
     def _gives_check(self, board: Board, piece: Piece, move: Move) -> bool:
         """Check if a move gives check to the opponent."""
-        # Make the move and see if opponent king is in check
-        new_board = board.make_move_copy(piece, move)
+        # Use fast make/unmake instead of expensive board copying
+        move_info = board.make_move_fast(piece, move)
         opponent_color = 'black' if piece.color == 'white' else 'white'
-        return new_board.in_check_king(opponent_color)
+        result = board.in_check_king(opponent_color)
+        board.unmake_move_fast(piece, move, move_info)
+        return result
     
     def _should_stop(self) -> bool:
         """Check if search should be stopped due to time limit."""
         return time.time() - self.start_time >= self.max_time
+    
+    def _move_puts_piece_in_danger(self, board: Board, piece: Piece, move: Move) -> bool:
+        """Check if moving a piece puts it in danger of being captured."""
+        # Skip this check for pawns and kings (different logic needed)
+        if piece.name in ['pawn', 'king']:
+            return False
+            
+        # Quick check: is the destination square attacked by opponent pawns?
+        opponent_color = 'black' if piece.color == 'white' else 'white'
+        if self._is_square_attacked_by_pawns(board, move.final, piece.color):
+            return True
+            
+        # For valuable pieces (queen, rook), do a more thorough check
+        if piece.name in ['queen', 'rook']:
+            # Make the move temporarily to check safety
+            move_info = board.make_move_fast(piece, move)
+            
+            # Quick attack check - only check for major pieces threatening this square
+            can_be_captured = self._is_square_attacked_by_major_pieces(board, move.final.row, move.final.col, opponent_color)
+            
+            # Undo the move
+            board.unmake_move_fast(piece, move, move_info)
+            
+            return can_be_captured
+            
+        return False
+    
+    def _is_square_attacked_by_major_pieces(self, board: Board, row: int, col: int, by_color: str) -> bool:
+        """Quick check if square is attacked by major pieces (queen, rook, bishop)."""
+        # Check for queen, rook, and bishop attacks only (faster than full search)
+        directions = [
+            (-1, 0), (1, 0), (0, -1), (0, 1),  # Rook/Queen directions
+            (-1, -1), (-1, 1), (1, -1), (1, 1)  # Bishop/Queen directions
+        ]
+        
+        for dr, dc in directions:
+            r, c = row + dr, col + dc
+            while 0 <= r < 8 and 0 <= c < 8:
+                square = board.squares[r][c]
+                if square.has_piece and square.piece:
+                    piece = square.piece
+                    if piece.color == by_color:
+                        # Check if this piece can attack the target square
+                        if ((piece.name in ['queen', 'rook'] and (dr == 0 or dc == 0)) or
+                            (piece.name in ['queen', 'bishop'] and dr != 0 and dc != 0)):
+                            return True
+                    break  # Piece blocks further attacks in this direction
+                r += dr
+                c += dc
+        return False
+    
+    def _is_square_attacked_by_color(self, board: Board, row: int, col: int, by_color: str) -> bool:
+        """Check if a square is attacked by any piece of the given color."""
+        for r in range(8):
+            for c in range(8):
+                square = board.squares[r][c]
+                if square.has_piece and square.piece and square.piece.color == by_color:
+                    attacking_piece = square.piece
+                    # Generate moves for this piece
+                    board.calc_moves(attacking_piece, r, c, filter_checks=False)
+                    for move in attacking_piece.moves:
+                        if move.final.row == row and move.final.col == col:
+                            return True
+        return False
+    
+    def _is_square_defended_by_color(self, board: Board, row: int, col: int, by_color: str) -> bool:
+        """Check if a square is defended by any piece of the given color."""
+        return self._is_square_attacked_by_color(board, row, col, by_color)

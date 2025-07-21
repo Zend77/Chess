@@ -180,38 +180,9 @@ class PerftTest:
             board.next_player = 'black' if board.next_player == 'white' else 'white'
     
     def copy_board(self, board: Board) -> Board:
-        """
-        Create a deep copy of the board for temporary move testing.
-        This is essential for perft to avoid modifying the original board state.
-        """
-        new_board = Board()
-        
-        # Copy all pieces with their current state
-        for row in range(8):
-            for col in range(8):
-                piece = board.squares[row][col].piece
-                if piece:
-                    # Create a new piece of the same type and color
-                    piece_type = type(piece)
-                    new_piece = piece_type(piece.color)
-                    new_piece.moved = piece.moved  # Important for castling and pawn moves
-                    # Copy any other piece-specific attributes
-                    if hasattr(piece, 'en_passant'):
-                        new_piece.en_passant = piece.en_passant
-                    new_board.squares[row][col].piece = new_piece
-                else:
-                    new_board.squares[row][col].piece = None
-        
-        # Copy all board state variables
-        new_board.next_player = board.next_player
-        new_board.castling_rights = board.castling_rights
-        new_board.en_passant = board.en_passant
-        new_board.halfmove_clock = board.halfmove_clock
-        new_board.fullmove_number = board.fullmove_number
-        new_board.last_move = board.last_move
-        
-        return new_board
-    
+        """Use the standard board copy method."""
+        return board.copy()
+
     def find_king(self, board: Board, color: str) -> Optional[Tuple[int, int]]:
         """Find the king of given color."""
         for row in range(8):

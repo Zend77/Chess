@@ -10,7 +10,6 @@ from move import Move
 from piece import Queen, Rook, Bishop, Knight, Pawn, Piece
 from AI import AI
 from fen import FEN
-from perft import perft
 
 class Game:
     """
@@ -610,12 +609,7 @@ class Game:
         self.redo_history = []  # Clear redo history on new position
         self.record_fen()
 
-    def show_perft_result(self, surface, depth: int = 2) -> None:
-        # Run perft for the current position and next player
-        result = perft(self.board, self.next_player, depth)
-        font = self.config.font
-        label = font.render(f"Perft({depth}): {result}", True, (0, 0, 0))
-        surface.blit(label, (10, 10))
+   
 
     def piece_to_promotion_char(self, piece: Optional[Piece]) -> Optional[str]:
         """Convert a promotion piece to its character representation."""

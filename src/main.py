@@ -15,9 +15,7 @@ class Main:
         p.display.set_caption('Chess')
         self.game = Game()
         self.clock = p.time.Clock()
-        # Perft testing display options - used for engine verification
-        self.show_perft = False
-        self.perft_depth = 2  # Default perft depth
+        
         
         # If AI is enabled and it's the AI's turn, let it move immediately
         while self.game.ai_enabled and self.game.ai and not self.game.game_over and self.game.next_player == self.game.ai.color:
@@ -46,11 +44,7 @@ class Main:
                 game.show_moves(screen)
                 game.show_pieces(screen)
                 game.show_check(screen)
-                game.show_hover(screen, p.mouse.get_pos())
-
-                # Show perft analysis overlay for engine testing (press 'P' to toggle)
-                if self.show_perft:
-                    game.show_perft_result(screen, self.perft_depth)
+                game.show_hover(screen, p.mouse.get_pos())           
 
                 if game.dragger.dragging:
                     game.dragger.update_blit(screen, theme_name=theme_name)
@@ -104,20 +98,6 @@ class Main:
                         # Load position from FEN notation
                         fen_str = input("Enter FEN: ")
                         game.load_fen(fen_str)
-                    elif event.key == p.K_p and not game.game_over:
-                        # Toggle perft display for engine testing
-                        self.show_perft = not self.show_perft
-                        print(f"Perft display: {self.show_perft}")
-                    # Set perft testing depth (1-3 keys)
-                    elif event.key == p.K_1:
-                        self.perft_depth = 1
-                        print("Perft depth set to 1")
-                    elif event.key == p.K_2:
-                        self.perft_depth = 2
-                        print("Perft depth set to 2")
-                    elif event.key == p.K_3:
-                        self.perft_depth = 3
-                        print("Perft depth set to 3")
                 elif event.type == p.QUIT:
                     running = False
 

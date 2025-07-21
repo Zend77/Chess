@@ -1,10 +1,10 @@
 from typing import Optional, List, Tuple
-from piece import *
-from const import *
+from piece import Piece, Pawn, King, Queen, Rook, Bishop, Knight
+from const import ROWS, COLS
 from square import Square
 from move import Move
 from fen import FEN
-from piece import Queen, Rook, Bishop, Knight
+from move_info import MoveInfo
 
 class Board:
     """
@@ -409,17 +409,181 @@ class Board:
         
         return new_board
 
-    def make_move_copy(self, piece: Piece, move: Move) -> 'Board':
+    # make_move_copy() method removed - replaced by efficient make_move_fast() system
+
+    def make_move_fast(self, piece: Piece, move: Move) -> 'MoveInfo':
         """
-        Make a move on a copy of the board and return the new board state.
-        Used for AI move simulation and evaluation.
+        Make a move efficiently and return information needed to undo it.
+        This replaces expensive board copying for AI search.
+        
+        Args:
+            piece: The piece to move
+            move: The move to make
+            
+        Returns:
+            MoveInfo object containing undo information
         """
-        board_copy = self.copy()
-        piece_copy = board_copy.squares[move.initial.row][move.initial.col].piece
-        if piece_copy:
-            board_copy.move(piece_copy, move)
-            board_copy.next_player = 'black' if board_copy.next_player == 'white' else 'white'
-        return board_copy
+        from move_info import MoveInfo
+        
+        move_info = MoveInfo()
+        initial = move.initial
+        final = move.final
+        
+        # Store current game state for undo
+        move_info.prev_castling_rights = self.castling_rights
+        move_info.prev_en_passant = self.en_passant
+        move_info.prev_halfmove_clock = self.halfmove_clock
+        move_info.prev_fullmove_number = self.fullmove_number
+        move_info.prev_next_player = self.next_player
+        move_info.piece_was_moved = piece.moved
+        
+        # Handle captured piece
+        final_square = self.squares[final.row][final.col]
+        if final_square.has_piece:
+            move_info.captured_piece = final_square.piece
+            move_info.captured_square_row = final.row
+            move_info.captured_square_col = final.col
+        
+        # Handle en passant capture
+        if (piece.name == 'pawn' and 
+            self.en_passant != '-' and 
+            move.final.row == (2 if piece.color == 'white' else 5) and
+            abs(move.final.col - move.initial.col) == 1 and
+            not final_square.has_piece):
+            
+            move_info.en_passant_capture = True
+            capture_row = move.final.row + (1 if piece.color == 'white' else -1)
+            capture_col = move.final.col
+            
+            captured_square = self.squares[capture_row][capture_col]
+            move_info.en_passant_captured_piece = captured_square.piece
+            move_info.en_passant_capture_row = capture_row
+            move_info.en_passant_capture_col = capture_col
+            
+            # Remove the en passant captured pawn
+            captured_square.piece = None
+        
+        # Handle castling
+        if (piece.name == 'king' and abs(final.col - initial.col) == 2):
+            move_info.is_castling = True
+            
+            # Determine rook positions
+            if final.col == 6:  # Kingside castling
+                move_info.rook_initial_row = initial.row
+                move_info.rook_initial_col = 7
+                move_info.rook_final_row = initial.row
+                move_info.rook_final_col = 5
+            else:  # Queenside castling
+                move_info.rook_initial_row = initial.row
+                move_info.rook_initial_col = 0
+                move_info.rook_final_row = initial.row
+                move_info.rook_final_col = 3
+            
+            # Move the rook
+            rook = self.squares[move_info.rook_initial_row][move_info.rook_initial_col].piece
+            self.squares[move_info.rook_final_row][move_info.rook_final_col].piece = rook
+            self.squares[move_info.rook_initial_row][move_info.rook_initial_col].piece = None
+            if rook:
+                rook.moved = True
+        
+        # Handle promotion
+        if move.promotion:
+            move_info.is_promotion = True
+            move_info.promoted_from_piece = piece
+            
+            # Create promoted piece
+            from piece import Queen, Rook, Bishop, Knight
+            promotion_pieces = {'q': Queen, 'r': Rook, 'b': Bishop, 'n': Knight}
+            if move.promotion in promotion_pieces:
+                promoted_piece = promotion_pieces[move.promotion](piece.color)
+                promoted_piece.moved = True
+                piece = promoted_piece
+        
+        # Make the main move
+        self.squares[initial.row][initial.col].piece = None
+        self.squares[final.row][final.col].piece = piece
+        piece.moved = True
+        
+        # Update game state
+        self.last_move = move
+        
+        # Update castling rights
+        self.update_castling_rights(piece, initial, final)
+        
+        # Update en passant
+        if (piece.name == 'pawn' and abs(final.row - initial.row) == 2):
+            # Pawn moved two squares, set en passant target
+            target_row = (initial.row + final.row) // 2
+            self.en_passant = f"{chr(ord('a') + final.col)}{8 - target_row}"
+        else:
+            self.en_passant = '-'
+        
+        # Update move counters
+        if piece.name == 'pawn' or move_info.captured_piece:
+            self.halfmove_clock = 0
+        else:
+            self.halfmove_clock += 1
+        
+        if self.next_player == 'black':
+            self.fullmove_number += 1
+        
+        # Switch players
+        self.next_player = 'black' if self.next_player == 'white' else 'white'
+        
+        return move_info
+    
+    def unmake_move_fast(self, piece: Piece, move: Move, move_info: 'MoveInfo') -> None:
+        """
+        Undo a move efficiently using stored move information.
+        
+        Args:
+            piece: The piece that was moved
+            move: The move to undo
+            move_info: Information about the move to undo
+        """
+        initial = move.initial
+        final = move.final
+        
+        # Restore game state
+        self.castling_rights = move_info.prev_castling_rights
+        self.en_passant = move_info.prev_en_passant
+        self.halfmove_clock = move_info.prev_halfmove_clock
+        self.fullmove_number = move_info.prev_fullmove_number
+        self.next_player = move_info.prev_next_player
+        
+        # Handle promotion undo
+        if move_info.is_promotion and move_info.promoted_from_piece:
+            piece = move_info.promoted_from_piece
+        
+        # Restore piece moved status
+        piece.moved = move_info.piece_was_moved
+        
+        # Undo the main move
+        self.squares[initial.row][initial.col].piece = piece
+        self.squares[final.row][final.col].piece = move_info.captured_piece
+        
+        # Undo castling
+        if move_info.is_castling:
+            # Move rook back
+            rook = self.squares[move_info.rook_final_row][move_info.rook_final_col].piece
+            self.squares[move_info.rook_initial_row][move_info.rook_initial_col].piece = rook
+            self.squares[move_info.rook_final_row][move_info.rook_final_col].piece = None
+            if rook:
+                rook.moved = move_info.piece_was_moved  # Restore rook's moved status
+        
+        # Undo en passant capture
+        if move_info.en_passant_capture:
+            self.squares[move_info.en_passant_capture_row][move_info.en_passant_capture_col].piece = move_info.en_passant_captured_piece
+        
+        # Restore game state
+        self.next_player = move_info.prev_next_player
+        self.halfmove_clock = move_info.prev_halfmove_clock
+        self.fullmove_number = move_info.prev_fullmove_number
+        self.castling_rights = move_info.prev_castling_rights
+        self.en_passant = move_info.prev_en_passant
+        
+        # Update last move (would need to track previous last move for full accuracy)
+        self.last_move = None
 
     def get_all_moves(self, color: str) -> list[tuple[Piece, Move]]:
         """

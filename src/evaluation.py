@@ -69,14 +69,14 @@ class Evaluation:
     ]
     
     QUEEN_TABLE = [
-        [-50, -40, -30, -10, -10, -30, -40, -50],  # Rank 8 - heavily penalized early development
-        [-40, -20, -10,   0,   0, -10, -20, -40],  # Rank 7 - still penalized
-        [-30, -10,  15,  20,  20,  15, -10, -30],  # Rank 6 - acceptable in middlegame
-        [-10,   0,  20,  25,  25,  20,   0, -10],  # Rank 5 - good central squares
-        [-10,   0,  20,  25,  25,  20,   0, -10],  # Rank 4 - good central squares  
-        [-30, -10,  15,  20,  20,  15, -10, -30],  # Rank 3 - acceptable in middlegame
-        [-40, -20, -10,   0,   0, -10, -20, -40],  # Rank 2 - penalized early development
-        [-50, -40, -30, -10, -10, -30, -40, -50]   # Rank 1 - heavily penalized early development
+        [-20, -15, -10,  -5,  -5, -10, -15, -20],  # Rank 8 - discourage early development
+        [-15, -10,  -5,   0,   0,  -5, -10, -15],  # Rank 7 - still discouraged
+        [-10,  -5,   5,   8,   8,   5,  -5, -10],  # Rank 6 - acceptable squares
+        [ -5,   0,   8,  10,  10,   8,   0,  -5],  # Rank 5 - good central squares
+        [ -5,   0,   8,  10,  10,   8,   0,  -5],  # Rank 4 - good central squares  
+        [-10,  -5,   5,   8,   8,   5,  -5, -10],  # Rank 3 - acceptable squares
+        [-15, -10,  -5,   0,   0,  -5, -10, -15],  # Rank 2 - discourage early development
+        [-20, -15, -10,  -5,  -5, -10, -15, -20]   # Rank 1 - discourage early development
     ]
     
     KING_MIDDLEGAME_TABLE = [
@@ -114,12 +114,12 @@ class Evaluation:
         
         # Core evaluations
         score += Evaluation.evaluate_material(board)
-        score += Evaluation.evaluate_position(board, game_phase)
+        score += Evaluation.evaluate_position(board, game_phase) * 0.5  # Reduced positional weight
         score += Evaluation.evaluate_mobility(board) * 0.1
         score += Evaluation.evaluate_king_safety(board, game_phase)
         score += Evaluation.evaluate_pawn_structure(board)
         score += Evaluation.evaluate_piece_coordination(board)
-        score += Evaluation.evaluate_tactical_themes(board)
+        score += Evaluation.evaluate_tactical_themes(board) * 2.0  # Increased tactical weight
         
         # Endgame-specific evaluation
         if game_phase == 'endgame':
