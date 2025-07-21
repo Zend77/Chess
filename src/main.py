@@ -8,18 +8,13 @@ class Main:
     """
     Main game controller that handles the pygame loop, user input, and game state.
     Manages the display, AI interactions, and various game modes like perft testing.
-    """
+    """ 
     def __init__(self):
         p.init()
         self.screen = p.display.set_mode((WIDTH, HEIGHT))
         p.display.set_caption('Chess')
         self.game = Game()
         self.clock = p.time.Clock()
-        
-        
-        # If AI is enabled and it's the AI's turn, let it move immediately
-        while self.game.ai_enabled and self.game.ai and not self.game.game_over and self.game.next_player == self.game.ai.color:
-            self.game.play_AI_turn(self.screen)
 
     def main_loop(self):
         """
@@ -35,6 +30,12 @@ class Main:
             game = self.game  # Always get the latest game object
             theme_name = getattr(game.config.theme, "name", None)
             screen.fill((0, 0, 0))
+
+            # AI startup guard - trigger AI for first move only after initial render
+            if (game.ai_enabled and game.ai and not game.game_over and 
+                game.next_player == game.ai.color and not game.ai_has_moved_initially):
+                game.ai_has_moved_initially = True
+                game.play_AI_turn(screen)
 
             # Render the game state - board, pieces, highlights, etc.
             if not game.game_over:
@@ -52,6 +53,25 @@ class Main:
                 game.show_end_screen(screen)
 
             # Process all user input events
+            # Skip event processing during AI cooldown to prevent phantom moves
+            if game.ai_thinking_cooldown > 0:
+                game.ai_thinking_cooldown -= 1
+                # Clear events and reset dragger state
+                p.event.clear()
+                game.dragger.dragging = False
+                game.dragger.piece = None
+                game.selected_square = None
+                
+                if game.ai_thinking_cooldown == 0:
+                    game.ai_is_thinking = False
+                    # Final event clear
+                    p.event.clear()
+                
+                # Skip to display update, don't process any events
+                clock.tick(MAX_FPS)
+                p.display.update()
+                continue
+                
             for event in p.event.get():
                 # Handle mouse interactions for piece movement
                 if event.type == p.MOUSEBUTTONDOWN and not game.game_over:
@@ -77,7 +97,6 @@ class Main:
                     elif event.key == p.K_g and not game.game_over:
                         # Toggle AI opponent on/off
                         game.ai_enabled = not game.ai_enabled
-                        print(f"AI Enabled: {game.ai_enabled}")
                         if game.ai_enabled:
                             if game.ai is None:
                                 game.ai = AI(game.next_player)
@@ -93,7 +112,6 @@ class Main:
                             game.game_over = True
                         else:
                             game.draw_offered = True
-                            print("Draw offered. Press 'D' again to accept.")
                     elif event.key == p.K_f and not game.game_over:
                         # Load position from FEN notation
                         fen_str = input("Enter FEN: ")
@@ -102,6 +120,7 @@ class Main:
                     running = False
 
             clock.tick(MAX_FPS)
+            
             p.display.update()
 
 if __name__ == '__main__':

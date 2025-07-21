@@ -36,9 +36,13 @@ class Game:
         self.game_over = False
         self.end_message = ""
         self.draw_offered = False
-        self.ai: Optional[AI] = AI(self.next_player)
+        self.ai: Optional[AI] = None  # Don't create AI until after color prompt
         self.ai_enabled = False  # AI opponent disabled by default
-        self.AI_color_prompt()  # Let user choose AI color
+        self.ai_is_thinking = False  # Flag to prevent mouse handler from triggering during AI moves
+        self.ai_thinking_cooldown = 0  # Frame counter to delay flag clearing
+        self.ai_has_moved_initially = False  # Flag to track if AI has made its first move
+        self.in_book = True  # Track if both players are still following book moves
+        self.AI_color_prompt()  # Let user choose AI color - creates AI here
         self.board = Board()
         # Set up the standard starting position
         self.board.set_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
@@ -47,6 +51,13 @@ class Game:
         self.fen_history: list[str] = []  # Track position history for threefold repetition
         self.redo_history: list[str] = []  # Track undone positions for redo functionality
         self.record_fen()
+        
+    def update_book_status_after_human_move(self):
+        """Check if the current position is still in the opening book after a human move."""
+        if self.ai and self.in_book:
+            current_fen = FEN.get_fen(self.board)
+            if not self.ai.opening_book.is_in_book(current_fen):
+                self.in_book = False
 
     @property
     def theme_name(self) -> Optional[str]:
@@ -182,8 +193,14 @@ class Game:
 
     def next_turn(self) -> None:
         """Switch the active player from white to black or black to white."""
+        old_player = self.next_player
         self.next_player = 'white' if self.next_player == 'black' else 'black'
         self.board.next_player = self.next_player  # Keep board in sync
+        
+        # Reset AI moves counter when switching away from AI's turn
+        if hasattr(self, '_ai_moves_this_turn'):
+            if self.ai and self.next_player != self.ai.color:
+                self._ai_moves_this_turn = 0
 
     def change_theme(self) -> None:
         """Cycle through available themes for the chess board and pieces."""
@@ -314,6 +331,17 @@ class Game:
         Handle mouse button press events for selecting and dragging pieces.
         Determines which square was clicked and initiates piece dragging if valid.
         """
+        # Don't process mouse events during AI moves or shortly after
+        if self.ai_is_thinking or self.ai_thinking_cooldown > 0:
+            # Clear any remaining events
+            import pygame as p
+            p.event.clear()
+            return
+        
+        # Don't process mouse events when it's the AI's turn
+        if self.ai_enabled and self.ai and self.next_player == self.ai.color:
+            return
+        
         dragger = self.dragger
         board = self.board
         dragger.update_mouse(pos)
@@ -338,6 +366,14 @@ class Game:
         Handle mouse motion events during piece dragging.
         Updates the display to show the piece being dragged and its valid movement squares.
         """
+        # Don't process mouse events during AI moves or shortly after
+        if self.ai_is_thinking or self.ai_thinking_cooldown > 0:
+            return
+        
+        # Don't process mouse events when it's the AI's turn
+        if self.ai_enabled and self.ai and self.next_player == self.ai.color:
+            return
+        
         if self.dragger.dragging:
             self.dragger.update_mouse(pos)
             self.show_bg(surface)
@@ -354,6 +390,29 @@ class Game:
         Handle mouse button release events to drop pieces on the board.
         Validates the move, updates the game state, and plays the AI turn if applicable.
         """
+        # Don't process mouse events during AI moves or shortly after
+        if self.ai_is_thinking or self.ai_thinking_cooldown > 0:
+            # Always reset dragger state and clear events to prevent phantom moves
+            self.dragger.dragging = False
+            self.dragger.piece = None
+            self.selected_square = None
+            # Clear pygame events to prevent accumulation
+            import pygame as p
+            p.event.clear()
+            return
+        
+        # Don't process mouse events when it's the AI's turn
+        if self.ai_enabled and self.ai and self.next_player == self.ai.color:
+            # Always reset dragger state to prevent phantom moves
+            self.dragger.dragging = False
+            self.dragger.piece = None
+            self.selected_square = None
+            return
+        
+        # Initialize AI trigger variables
+        should_trigger_ai = False
+        ai_color = None
+            
         dragger = self.dragger
         board = self.board
         if dragger.dragging:
@@ -388,6 +447,9 @@ class Game:
                     # Record fen here
                     self.record_fen()
 
+                    # Update book status after human move
+                    self.update_book_status_after_human_move()
+
                     # Check for game over after the move
                     self.check_game_end()
 
@@ -401,12 +463,35 @@ class Game:
                     else:
                         print("Material Advantage: Even")
 
-                    # After a successful human move and next_turn()
-                    if self.ai_enabled and self.ai and self.next_player == self.ai.color and not self.game_over:
-                        self.play_AI_turn(surface)
+                    # Store AI trigger info but don't execute yet
+                    should_trigger_ai = (self.ai_enabled and self.ai and self.next_player == self.ai.color and 
+                                       not self.game_over and not self.ai_is_thinking)
+                    ai_color = self.ai.color if (should_trigger_ai and self.ai) else None
 
+            # Always clean up dragger state before potentially triggering AI
             dragger.undrag_piece(theme_name=self.theme_name)
+            
+            # After complete UI cleanup, trigger AI if needed
+            if should_trigger_ai:
+                # Double-check that we should actually trigger AI
+                if self.ai and self.next_player == self.ai.color:
+                    # Force complete visual update
+                    surface.fill((0, 0, 0))  # Clear screen
+                    self.show_bg(surface)
+                    self.show_last_move(surface) 
+                    self.show_pieces(surface)
+                    self.show_check(surface)
+                    import pygame as p
+                    p.display.flip()  # Force immediate screen update
+                    
+                    # Small delay to ensure visual state is settled
+                    p.time.wait(50)  # 50ms delay
+                    
+                    self.play_AI_turn(surface)
+                else:
+                    return
         else:
+            dragger.undrag_piece(theme_name=self.theme_name)
             self.selected_square = None
 
     def prompt_promotion(self, surface, color: str) -> Piece:
@@ -483,20 +568,19 @@ class Game:
                         ai_color = 'black'
                         selecting_color = False
                     elif event.key == p.K_n:
-                        self.ai = AI(self.next_player, "medium")  # Default difficulty
+                        self.ai = None  # No AI created
                         self.ai_enabled = False
-                        print("No AI will play.")
                         return
 
         # If AI was selected, choose difficulty
         if ai_color:
             difficulty_prompt = title.render("AI Difficulty Selection", True, (255, 255, 255))
-            diff1 = font.render("Press 1 for Easy (depth 3, 2s)", True, (255, 255, 255))
-            diff2 = font.render("Press 2 for Medium (depth 4, 5s)", True, (255, 255, 255))
-            diff3 = font.render("Press 3 for Hard (depth 6, 10s)", True, (255, 255, 255))
-            diff4 = font.render("Press 4 for Expert (depth 8, 20s)", True, (255, 255, 255))
-            diff5 = font.render("Press 5 for Master (depth 10, 30s)", True, (255, 255, 255))
-            diff6 = font.render("Press 6 for Grandmaster (depth 12, 60s)", True, (255, 255, 255))
+            diff1 = font.render("Press 1 for Easy (depth 2, 15s)", True, (255, 255, 255))
+            diff2 = font.render("Press 2 for Medium (depth 3, 15s)", True, (255, 255, 255))
+            diff3 = font.render("Press 3 for Hard (depth 4, 30s)", True, (255, 255, 255))
+            diff4 = font.render("Press 4 for Expert (depth 6, 45s)", True, (255, 255, 255))
+            diff5 = font.render("Press 5 for Master (depth 8, 60s)", True, (255, 255, 255))
+            diff6 = font.render("Press 6 for Grandmaster (depth 10, 120s)", True, (255, 255, 255))
 
             selecting_difficulty = True
             while selecting_difficulty:
@@ -527,7 +611,6 @@ class Game:
                             difficulty = difficulty_map[event.key]
                             self.ai = AI(ai_color, difficulty)
                             self.ai_enabled = True
-                            print(f"AI will play as {ai_color} with {difficulty} difficulty.")
                             selecting_difficulty = False
 
     def play_AI_turn(self, surface) -> None:
@@ -535,32 +618,99 @@ class Game:
         Execute the best move found by the AI using minimax algorithm.
         The AI's turn is played automatically after the human player.
         """
-        if not self.ai:
+        # Prevent multiple simultaneous AI calls
+        if self.ai_is_thinking:
             return
             
-        print(f"\n=== AI Turn ({self.ai.color}) ===")
+        # Set thinking flag immediately to block all other events
+        self.ai_is_thinking = True
+            
+        if not self.ai:
+            self.ai_is_thinking = False
+            return
+            
+        if not self.ai_enabled:
+            self.ai_is_thinking = False
+            return
+            
+        # Track consecutive AI moves to detect multiple moves per turn
+        if not hasattr(self, '_ai_moves_this_turn'):
+            self._ai_moves_this_turn = 0
+        self._ai_moves_this_turn += 1
         
-        # Get AI's best move using advanced search
-        piece, move = self.ai.get_best_move(self.board)
+        if self._ai_moves_this_turn > 1:
+            # Emergency abort - AI trying to make multiple moves
+            self.ai_is_thinking = False
+            return
+        
+        # Verify it's actually the AI's turn
+        if self.next_player != self.ai.color:
+            self.ai_is_thinking = False
+            self.ai_thinking_cooldown = 0
+            return
+        
+        # Completely clear all UI state and pygame events to prevent phantom moves
+        self.dragger.dragging = False
+        self.dragger.piece = None
+        self.dragger.initial_row = -1
+        self.dragger.initial_col = -1
+        self.dragger.mouseX = 0
+        self.dragger.mouseY = 0
+        self.selected_square = None
+        
+        # Clear pygame event queue to remove any queued mouse events
+        import pygame as p
+        p.event.clear()
+        
+        # Only use book move if still in book
+        piece, move = self.ai.get_best_move(self.board, use_book=self.in_book)
+        
+        # After timeout, validate that piece and move are consistent with current board
+        if piece is not None and move is not None:
+            actual_piece = self.board.squares[move.initial.row][move.initial.col].piece
+            if actual_piece != piece:
+                # Force AI to recalculate with current board state
+                piece, move = self.ai._emergency_fallback(self.board)
         
         if piece is not None and move is not None:
+            # Validate the move is actually legal
+            if self.ai.color:  # Type check
+                legal_moves = self.board.get_all_moves(self.ai.color)
+                legal_move_strings = [m.to_algebraic() for p, m in legal_moves]
+                
+                if move.to_algebraic() not in legal_move_strings:
+                    self.ai_is_thinking = False
+                    self.ai_thinking_cooldown = 0
+                    return
+            
             captured = self.board.squares[move.final.row][move.final.col].has_enemy_piece(piece.color)
+            
             self.board.move(piece, move, surface)
+            
+            # Force immediate screen update after each move
+            import pygame as p
+            surface.fill((0, 0, 0))
+            self.show_bg(surface)
+            self.show_pieces(surface)
+            p.display.flip()
+            p.time.wait(100)  # 100ms pause to make move visible
+            
             self.play_sound(captured)
             self.next_turn()
-            # RECORD FEN HERE
+            # Record FEN here
             self.record_fen()
             self.check_game_end()
             
-            # Show position analysis after AI move
-            analysis = self.ai.analyze_position(self.board)
-            print(f"Position analysis: {analysis['evaluation']:+.2f} pawns")
-            print(f"Game phase: {analysis['game_phase']}")
-            print(f"Position type: {analysis['position_type']}")
         else:
-            print("AI has no legal moves - game should be over")
-            self.check_game_end()
-    
+            if self.ai.color:  # Type check
+                legal_moves = self.board.get_all_moves(self.ai.color)
+                if not legal_moves:
+                    self.check_game_end()
+        
+        # Always clear the thinking flag when AI turn ends - but use cooldown to prevent race conditions
+        self.ai_thinking_cooldown = 60  # 1 second at 60 FPS - enough to see moves clearly
+        # ai_is_thinking will remain True until cooldown expires
+
     def show_end_screen(self, surface) -> None:
         """
         Display the end game screen with the result (checkmate, stalemate, etc.)

@@ -27,16 +27,16 @@ class AI:
     def _get_difficulty_settings(self, difficulty: str) -> Tuple[int, float]:
         """Get search depth and time limit based on difficulty level."""
         settings = {
-            'easy': (3, 2.0),      # Depth 3, 2 seconds
-            'medium': (4, 5.0),    # Depth 4, 5 seconds  
-            'hard': (6, 10.0),     # Depth 6, 10 seconds
-            'expert': (8, 20.0),   # Depth 8, 20 seconds
-            'master': (10, 30.0),  # Depth 10, 30 seconds
-            'grandmaster': (12, 60.0)  # Depth 12, 60 seconds
+            'easy': (2, 15.0),       
+            'medium': (3, 15.0),    
+            'hard': (4, 30.0),        
+            'expert': (6, 45.0),
+            'master': (10, 60.0),
+            'grandmaster': (12, 120.0)    
         }
-        return settings.get(difficulty, (4, 5.0))
+        return settings.get(difficulty, (3, 2.0))
     
-    def get_best_move(self, board) -> Tuple[Optional[Piece], Optional[Move]]:
+    def get_best_move(self, board, use_book=True) -> Tuple[Optional[Piece], Optional[Move]]:
         """
         Get the best move using opening book first, then minimax algorithm.
         
@@ -46,42 +46,39 @@ class AI:
         Returns:
             Tuple of (piece to move, move to make) or (None, None) if no moves available
         """
-        print(f"AI ({self.color}) thinking... (depth {self.depth}, time limit {self.time_limit}s)")
-        
         # First check opening book
-        current_fen = FEN.get_fen(board)
-        book_move = self.opening_book.get_book_move(current_fen)
-        
-        if book_move:
-            try:
-                # Convert algebraic notation to move object
-                move = Move.from_algebraic(book_move, board)
-                piece = board.squares[move.initial.row][move.initial.col].piece
-                
-                if piece and piece.color == self.color:
-                    # Verify the book move is legal
-                    board.calc_moves(piece, move.initial.row, move.initial.col, filter_checks=True)
-                    if move in piece.moves:
-                        print(f"AI used opening book: {book_move}")
-                        return piece, move
-            except Exception as e:
-                print(f"Book move failed: {e}")
+        if use_book:
+            current_fen = FEN.get_fen(board)
+            book_move = self.opening_book.get_book_move(current_fen)
+            
+            if book_move:
+                try:
+                    # Convert algebraic notation to move object
+                    move = Move.from_algebraic(book_move, board)
+                    piece = board.squares[move.initial.row][move.initial.col].piece
+                    
+                    if piece and piece.color == self.color:
+                        # Verify the book move is legal
+                        board.calc_moves(piece, move.initial.row, move.initial.col, filter_checks=True)
+                        if move in piece.moves:
+                            return piece, move
+                except Exception as e:
+                    pass
         
         # Fall back to search if no book move
-        print("AI searching with minimax algorithm...")
         result = self.search_engine.search(board, self.depth, self.time_limit)
         
         if result.best_move:
             # Find the piece to move
             piece = board.squares[result.best_move.initial.row][result.best_move.initial.col].piece
-            # Convert centipawns to pawns for display
-            eval_in_pawns = result.score / 100.0
-            print(f"AI evaluation: {eval_in_pawns:+.2f} pawns")
-            print(f"AI chose: {result.best_move.to_algebraic()}")
-            return piece, result.best_move
+            
+            # Validate piece exists and belongs to AI
+            if piece and piece.color == self.color:
+                return piece, result.best_move
+            else:
+                return self._emergency_fallback(board)
         else:
             # Search failed (timeout or no moves found) - use fallback
-            print("Search failed, using fallback move selection...")
             return self._emergency_fallback(board)
     
     def random_move(self, board) -> Tuple[Optional[Piece], Optional[Move]]:
@@ -101,7 +98,6 @@ class AI:
             return None, None
         
         piece, move = random.choice(all_moves)
-        print(f"AI chose random move: {move.to_algebraic()}")
         return piece, move
     
     def evaluate_position(self, board) -> float:
@@ -123,47 +119,34 @@ class AI:
         return score
     
     def set_difficulty(self, difficulty: str) -> None:
-        """Change AI difficulty level."""
         self.difficulty = difficulty
         self.depth, self.time_limit = self._get_difficulty_settings(difficulty)
-        print(f"AI difficulty set to {difficulty} (depth {self.depth}, time {self.time_limit}s)")
     
     def analyze_position(self, board) -> dict:
-        """
-        Provide detailed position analysis.
-        
-        Returns:
-            Dictionary with analysis details
-        """
-        evaluation = self.evaluate_position(board)
-        all_moves = board.get_all_moves(self.color)
-        
-        analysis = {
-            'evaluation': evaluation / 100.0,  # Convert to pawns
-            'move_count': len(all_moves),
-            'material_balance': self._get_material_balance(board),
-            'game_phase': self._get_game_phase(board),
-            'position_type': self._classify_position(board)
-        }
-        
-        return analysis
+        # Placeholder for position analysis logic
+        return {}
     
     def _get_material_balance(self, board) -> dict:
-        """Calculate material balance for both sides."""
+        """
+        Calculate material balance for both sides.
+        
+        Args:
+            board: Current board state
+            
+        Returns:
+            Dictionary with material values for white, black, and the difference
+        """
         white_material = 0
         black_material = 0
         
-        for row in range(ROWS):
-            for col in range(COLS):
-                square = board.squares[row][col]
+        for row in board.squares:
+            for square in row:
                 if square.has_piece and square.piece:
-                    piece = square.piece
-                    value = Evaluation.PIECE_VALUES.get(piece.name, 0)
-                    if piece.name != 'king':  # Exclude king from material count
-                        if piece.color == 'white':
-                            white_material += value
-                        else:
-                            black_material += value
+                    value = square.piece.value
+                    if square.piece.color == 'white':
+                        white_material += value
+                    else:
+                        black_material += value
         
         return {
             'white': white_material,
@@ -207,10 +190,7 @@ class AI:
         all_moves = board.get_all_moves(self.color)
         
         if not all_moves:
-            print("No legal moves available - checkmate or stalemate")
             return None, None
-        
-        print(f"Emergency fallback: selecting from {len(all_moves)} legal moves")
         
         # Try to find a good move quickly
         # Priority: 1) Captures 2) Center moves 3) Safe moves 4) Any move
@@ -230,16 +210,12 @@ class AI:
         # Select best available option
         if captures:
             piece, move = random.choice(captures)
-            print(f"Emergency: selected capture {move.to_algebraic()}")
         elif center_moves:
             piece, move = random.choice(center_moves)
-            print(f"Emergency: selected center move {move.to_algebraic()}")
         elif safe_moves:
             piece, move = random.choice(safe_moves)
-            print(f"Emergency: selected safe move {move.to_algebraic()}")
         else:
             piece, move = random.choice(all_moves)
-            print(f"Emergency: selected random move {move.to_algebraic()}")
         
         return piece, move
     
