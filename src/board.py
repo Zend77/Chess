@@ -1,4 +1,4 @@
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 from piece import Piece, Pawn, King, Queen, Rook, Bishop, Knight
 from const import ROWS, COLS
 from square import Square
@@ -481,6 +481,7 @@ class Board:
             
             # Move the rook
             rook = self.squares[move_info.rook_initial_row][move_info.rook_initial_col].piece
+            move_info.rook_was_moved = rook.moved if rook else False  # Store rook's original status
             self.squares[move_info.rook_final_row][move_info.rook_final_col].piece = rook
             self.squares[move_info.rook_initial_row][move_info.rook_initial_col].piece = None
             if rook:
@@ -569,7 +570,7 @@ class Board:
             self.squares[move_info.rook_initial_row][move_info.rook_initial_col].piece = rook
             self.squares[move_info.rook_final_row][move_info.rook_final_col].piece = None
             if rook:
-                rook.moved = move_info.piece_was_moved  # Restore rook's moved status
+                rook.moved = move_info.rook_was_moved  # Restore rook's original moved status
         
         # Undo en passant capture
         if move_info.en_passant_capture:

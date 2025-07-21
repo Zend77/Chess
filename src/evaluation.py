@@ -13,7 +13,7 @@ class Evaluation:
     Combines multiple evaluation factors with proper weighting.
     """
     
-    # Enhanced piece values in centipawns
+    # Piece values in centipawns
     PIECE_VALUES = {
         'pawn': 100,
         'knight': 320,
@@ -23,15 +23,16 @@ class Evaluation:
         'king': 20000
     }
     
-    # Enhanced Piece-Square Tables (more accurate positional guidance)
+    # Piece-Square Tables
+    # Tables are oriented from WHITE's perspective (row 0 = rank 8, row 7 = rank 1)
     PAWN_TABLE = [
-        [  0,   0,   0,   0,   0,   0,   0,   0],
+        [  0,   0,   0,   0,   0,   0,   0,   0],  
         [ 78,  83,  86,  73, 102,  82,  85,  90],
         [  7,  29,  21,  44,  40,  31,  44,   7],
         [-17,  16,  -2,  15,  14,   0,  15, -13],
-        [-26,   3,  10,  9,   6,   1,   0, -23],
+        [-26,   3,  10,  9,   6,   1,   0,  -23],
         [-22,   9,   5, -11, -10,  -2,   3, -19],
-        [-31,   8,  -7, -37, -36, -14,   3, -31],
+        [  5,  10,  10, -20, -20,  10,  10,   5],
         [  0,   0,   0,   0,   0,   0,   0,   0]
     ]
     
@@ -69,14 +70,14 @@ class Evaluation:
     ]
     
     QUEEN_TABLE = [
-        [-20, -15, -10,  -5,  -5, -10, -15, -20],  # Rank 8 - discourage early development
-        [-15, -10,  -5,   0,   0,  -5, -10, -15],  # Rank 7 - still discouraged
-        [-10,  -5,   5,   8,   8,   5,  -5, -10],  # Rank 6 - acceptable squares
-        [ -5,   0,   8,  10,  10,   8,   0,  -5],  # Rank 5 - good central squares
-        [ -5,   0,   8,  10,  10,   8,   0,  -5],  # Rank 4 - good central squares  
-        [-10,  -5,   5,   8,   8,   5,  -5, -10],  # Rank 3 - acceptable squares
-        [-15, -10,  -5,   0,   0,  -5, -10, -15],  # Rank 2 - discourage early development
-        [-20, -15, -10,  -5,  -5, -10, -15, -20]   # Rank 1 - discourage early development
+        [-20, -15, -10,  -5,  -5, -10, -15, -20], 
+        [-15, -10,  -5,   0,   0,  -5, -10, -15],  
+        [-10,  -5,   5,   8,   8,   5,  -5, -10],  
+        [ -5,   0,   8,  10,  10,   8,   0,  -5],  
+        [ -5,   0,   8,  10,  10,   8,   0,  -5],    
+        [-10,  -5,   5,   8,   8,   5,  -5, -10],  
+        [-15, -10,  -5,   0,   0,  -5, -10, -15],  
+        [-20, -15, -10,  -5,  -5, -10, -15, -20]   
     ]
     
     KING_MIDDLEGAME_TABLE = [
@@ -114,12 +115,12 @@ class Evaluation:
         
         # Core evaluations
         score += Evaluation.evaluate_material(board)
-        score += Evaluation.evaluate_position(board, game_phase) * 0.5  # Reduced positional weight
+        score += Evaluation.evaluate_position(board, game_phase) * 0.1  # Drastically reduced positional weight
         score += Evaluation.evaluate_mobility(board) * 0.1
         score += Evaluation.evaluate_king_safety(board, game_phase)
         score += Evaluation.evaluate_pawn_structure(board)
         score += Evaluation.evaluate_piece_coordination(board)
-        score += Evaluation.evaluate_tactical_themes(board) * 2.0  # Increased tactical weight
+        score += Evaluation.evaluate_tactical_themes(board) * 3.0  # Much higher tactical weight
         
         # Endgame-specific evaluation
         if game_phase == 'endgame':
@@ -127,9 +128,39 @@ class Evaluation:
         
         # Opening-specific penalties (especially early queen development)
         if game_phase == 'opening':
-            score += Evaluation.evaluate_opening_principles(board)
+            score += Evaluation.evaluate_opening_principles(board) * 2.0  # Double weight for opening principles
         
         return score
+    
+    @staticmethod
+    def evaluate_debug(board) -> Dict[str, float]:
+        """
+        Debug version that returns all evaluation components separately.
+        """
+        game_phase = Evaluation._get_game_phase(board)
+        
+        components = {
+            'material': Evaluation.evaluate_material(board),
+            'position': Evaluation.evaluate_position(board, game_phase) * 0.1,
+            'mobility': Evaluation.evaluate_mobility(board) * 0.1,
+            'king_safety': Evaluation.evaluate_king_safety(board, game_phase),
+            'pawn_structure': Evaluation.evaluate_pawn_structure(board),
+            'piece_coordination': Evaluation.evaluate_piece_coordination(board),
+            'tactical': Evaluation.evaluate_tactical_themes(board) * 3.0,
+        }
+        
+        if game_phase == 'endgame':
+            components['endgame'] = Evaluation.evaluate_endgame_factors(board)
+        else:
+            components['endgame'] = 0.0
+            
+        if game_phase == 'opening':
+            components['opening'] = Evaluation.evaluate_opening_principles(board)
+        else:
+            components['opening'] = 0.0
+            
+        components['total'] = sum(components.values())
+        return components
     
     @staticmethod
     def evaluate_material(board) -> float:
@@ -640,8 +671,32 @@ class Evaluation:
                             else:
                                 score -= development_bonus
                     
-                    # Penalty for moving the same piece multiple times early
-                    # (This would require tracking move history - simplified for now)
+                    # Strong penalty for moving same piece multiple times in opening
+                    # This will heavily penalize moves like Nf3-g5
+                    elif piece.name in ['knight', 'bishop'] and move_count <= 8:
+                        # Check if this piece type has "over-developed" by counting pieces off starting squares
+                        if piece.name == 'knight':
+                            # For knights, if we see a knight in an "unusual" square early, it might be a second move
+                            # Knights should ideally go to c3, d2, e2, f3, c6, d7, e7, f6
+                            good_knight_squares = {
+                                'white': [(5, 2), (5, 3), (5, 4), (5, 5), (6, 2), (6, 5)],  # c3, d3, e3, f3, c2, f2
+                                'black': [(2, 2), (2, 3), (2, 4), (2, 5), (1, 2), (1, 5)]   # c6, d6, e6, f6, c7, f7
+                            }
+                            
+                            # Heavy penalty for knights on poor squares in opening
+                            if (row, col) not in good_knight_squares.get(piece.color, []):
+                                # Squares like g5, h5, g4, h4, a5, b5 for white are very poor early
+                                if piece.color == 'white' and row <= 4 and col in [6, 7]:  # g5, h5, g4, h4, etc
+                                    poor_knight_penalty = 100  # Very heavy penalty
+                                elif piece.color == 'black' and row >= 3 and col in [6, 7]:  # g5, h5, g4, h4, etc  
+                                    poor_knight_penalty = 100
+                                else:
+                                    poor_knight_penalty = 50  # Medium penalty for other poor squares
+                                    
+                                if piece.color == 'white':
+                                    score -= poor_knight_penalty
+                                else:
+                                    score += poor_knight_penalty
                     
                     # Penalty for early h/a pawn moves (weakening moves)
                     elif piece.name == 'pawn' and move_count <= 6:

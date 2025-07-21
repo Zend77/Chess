@@ -30,6 +30,7 @@ class MoveInfo:
         self.rook_initial_col: int = -1
         self.rook_final_row: int = -1
         self.rook_final_col: int = -1
+        self.rook_was_moved: bool = False  # Store rook's original moved status
         
         # Game state before move (for restoration)
         self.prev_castling_rights: str = ""
