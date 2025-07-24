@@ -591,33 +591,16 @@ class OpeningBook:
             # Philidor Defense: 1.e4 e5 2.Nf3 d6
             "rnbqkbnr/ppp2ppp/3p4/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 3": [
                 ("d2d4", 35), ("f1c4", 25), ("b1c3", 20), ("c2c3", 15), ("h2h3", 5)
-            ]
-        }
-        
-        # Forbidden moves that should never be played
-        # Format: FEN -> list of bad moves to avoid
-        self.forbidden_moves = {
-            # Never play early queen moves in most openings
-            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1": [
-                "d1h5", "d1g4", "d1f3"
             ],
             
-            # Don't bring queen out early in Sicilian
-            "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2": [
-                "d1h5", "d1g4", "d1f3"
-            ],
-            
-            # Don't weaken kingside in opening
-            "rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq d3 0 1": [
-                "h7h6", "h7h5", "g7g5", "f7f6", "f7f5"
-            ],
+            # =========================
+            # ADDITIONAL GOOD MOVES (previously misplaced)
+            # =========================
             
             # Queen's Gambit Declined: 1.d4 d5 2.c4 e6 3.Nc3
             "rnbqkbnr/ppp2ppp/4p3/3p4/2PP4/2N5/PP2PPPP/R1BQKBNR b KQkq - 1 3": [
                 ("g8f6", 30), ("c7c6", 25), ("f8e7", 20), ("d5c4", 15), ("b8d7", 10)
             ],
-            
-            # MORE DEEP OPENING LINES
             
             # Scandinavian Defense: 1.e4 d5 (uncommon but sound)
             "rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 2": [
@@ -649,14 +632,12 @@ class OpeningBook:
                 ("d7d5", 25), ("g8f6", 25), ("c7c5", 20), ("e7e6", 15), ("g7g6", 10), ("e7e5", 5)
             ],
             
-            # MORE ANTI-EARLY QUEEN POSITIONS
-            
-            # After 1.d4 d5 2.Qd3 (premature queen development by white)
+            # After 1.d4 d5 2.Qd3 (premature queen development by white) - good responses
             "rnbqkbnr/ppp1pppp/8/3p4/3P4/3Q4/PPP1PPPP/RNB1KBNR b KQkq - 1 2": [
                 ("b8c6", 30), ("g8f6", 25), ("c8f5", 20), ("e7e6", 15), ("c7c6", 10)
             ],
             
-            # After 1.e4 e5 2.Nf3 Nc6 3.Bc4 f5 (premature attack)
+            # After 1.e4 e5 2.Nf3 Nc6 3.Bc4 f5 (premature attack) - good responses
             "r1bqkbnr/pppp1ppp/2n5/4pp2/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq f6 0 4": [
                 ("d2d3", 30), ("e4f5", 25), ("b1c3", 20), ("d1e2", 15), ("h2h3", 10)
             ],
@@ -666,26 +647,41 @@ class OpeningBook:
                 ("g7g6", 35), ("g8f6", 25), ("f8e7", 20), ("d7d6", 15), ("h7h6", 5)
             ],
             
-            # Légal's Mate setup defense: 1.e4 e5 2.Nf3 d6 3.Bc4 Bg4 4.Nc3 g6?? (bad move)
-            # We give good alternatives after 3...Bg4
+            # Legal's Mate setup defense: 1.e4 e5 2.Nf3 d6 3.Bc4 Bg4 4.Nc3 - good responses
             "r1bqkbnr/ppp2ppp/3p4/4p3/2B1P1b1/2N2N2/PPPP1PPP/R1BQK2R w KQkq - 1 5": [
                 ("h2h3", 30), ("d1d2", 25), ("f1e2", 20), ("d2d3", 15), ("a2a3", 10)
             ]
         }
         
-        # Store forbidden moves (early queen development)
+        # ===========================
+        # FORBIDDEN MOVES SECTION
+        # ===========================
+        # Moves that should never be played due to poor opening principles
         self.forbidden_moves = {
-            # Starting position - no early queen moves
+            # Starting position - no early queen development
             "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1": [
                 "d1h5", "d1g4", "d1f3", "d1e2"
             ],
             
-            # After 1.e4 - no immediate queen moves
+            # After 1.e4 - Black should not bring queen out early
             "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1": [
                 "d8h4", "d8g5", "d8f6", "d8e7"
             ],
             
-            # Many more positions where early queen moves are bad...
+            # Don't bring queen out early in Sicilian
+            "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2": [
+                "d1h5", "d1g4", "d1f3"
+            ],
+            
+            # Don't weaken kingside structure in opening
+            "rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq d3 0 1": [
+                "h7h6", "h7h5", "g7g5", "f7f6", "f7f5"
+            ],
+            
+            # After 1.e4 e5 - don't weaken kingside
+            "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2": [
+                "f2f4", "g2g4", "h2h4"  # Don't play aggressive pawn moves too early
+            ]
         }
     
     def get_book_move(self, fen: str) -> Optional[str]:
