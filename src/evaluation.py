@@ -1137,6 +1137,12 @@ class Evaluation:
                     
                 piece = square.piece
                 
+                # FIXED: Never consider kings as hanging pieces
+                # Kings cannot be captured and their high value (20000) 
+                # was causing massive score swings
+                if piece.name == 'king':
+                    continue
+                
                 # Check if this piece is hanging using more sophisticated analysis
                 hanging_value = Evaluation._calculate_hanging_value(board, piece, row, col)
                 

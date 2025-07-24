@@ -140,6 +140,8 @@ class Search:
             # No legal moves available
             if board.in_check_king(current_player):
                 # Checkmate - bad for current player
+                # If White is checkmated, score should be very negative (bad for White)
+                # If Black is checkmated, score should be very positive (good for White)
                 score = -20000 if current_player == 'white' else 20000
             else:
                 # Stalemate
@@ -238,7 +240,7 @@ class Search:
         if depth < 0:
             return Evaluation.evaluate(board)
         
-        # Check transposition table - RE-ENABLED with careful sign handling
+        # Check transposition table
         board_hash = self._hash_board_fast(board)
         if board_hash in self.transposition_table:
             entry = self.transposition_table[board_hash]
