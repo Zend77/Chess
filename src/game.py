@@ -454,8 +454,9 @@ class Game:
                     self.check_game_end()
 
                     # Show material advantage
-                    white_score, black_score = self.board.evaluate_material()
-                    diff = round(white_score + black_score, 1)
+                    from evaluation import Evaluation
+                    white_score, black_score = Evaluation.get_material_balance(self.board)
+                    diff = round(white_score - black_score, 1)
                     if diff > 0:
                         print(f"Material Advantage: White +{diff}")
                     elif diff < 0:

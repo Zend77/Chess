@@ -231,6 +231,29 @@ class Evaluation:
         return score
     
     @staticmethod
+    def get_material_balance(board) -> Tuple[float, float]:
+        """
+        Get material balance for both sides for display purposes.
+        Returns tuple of (white_score, black_score) based on piece values.
+        """
+        white_score = 0.0
+        black_score = 0.0
+        
+        for row in range(ROWS):
+            for col in range(COLS):
+                square = board.squares[row][col]
+                if square.has_piece and square.piece:
+                    piece = square.piece
+                    if piece.name != 'king':  # Exclude kings from material count
+                        value = Evaluation.PIECE_VALUES[piece.name]
+                        if piece.color == 'white':
+                            white_score += value
+                        else:
+                            black_score += value
+        
+        return white_score, black_score
+    
+    @staticmethod
     def evaluate_position(board, game_phase: str) -> float:
         """Enhanced positional evaluation using piece-square tables."""
         score = 0.0

@@ -5,22 +5,13 @@ Calculates the material outcome of capture sequences on a given square.
 
 from typing import List, Optional, Tuple
 from piece import Piece, Pawn, Knight, Bishop, Rook, Queen, King
+from evaluation import Evaluation
 
 class SEE:
     """
     Static Exchange Evaluation implementation.
     Calculates material exchanges without full search.
     """
-    
-    # Piece values for SEE (in centipawns)
-    PIECE_VALUES = {
-        'pawn': 100,
-        'knight': 320,
-        'bishop': 330,
-        'rook': 500,
-        'queen': 900,
-        'king': 20000  # Very high value to avoid king captures in SEE
-    }
     
     @staticmethod
     def evaluate_capture(board, move) -> int:
@@ -56,8 +47,8 @@ class SEE:
             black_attackers = [a for a in black_attackers if a != moving_piece_pos]
         
         # Initial capture value
-        captured_value = SEE.PIECE_VALUES.get(move.captured.name, 0)
-        moving_piece_value = SEE.PIECE_VALUES.get(moving_piece.name, 0)
+        captured_value = Evaluation.PIECE_VALUES.get(move.captured.name, 0)
+        moving_piece_value = Evaluation.PIECE_VALUES.get(moving_piece.name, 0)
         
         # Simulate the exchange sequence
         return SEE._simulate_exchange(
@@ -87,7 +78,7 @@ class SEE:
                     attackers.append((row, col, piece.name))
         
         # Sort by piece value (use least valuable pieces first)
-        attackers.sort(key=lambda x: SEE.PIECE_VALUES.get(x[2], 0))
+        attackers.sort(key=lambda x: Evaluation.PIECE_VALUES.get(x[2], 0))
         return attackers
     
     @staticmethod
@@ -200,7 +191,7 @@ class SEE:
                     break
                 # White recaptures
                 attacker = white_list.pop(0)  # Use least valuable
-                attacker_value = SEE.PIECE_VALUES.get(attacker[2], 0)
+                attacker_value = Evaluation.PIECE_VALUES.get(attacker[2], 0)
                 material_balance += current_piece_value
                 current_piece_value = attacker_value
                 
@@ -213,7 +204,7 @@ class SEE:
                     break
                 # Black recaptures
                 attacker = black_list.pop(0)  # Use least valuable
-                attacker_value = SEE.PIECE_VALUES.get(attacker[2], 0)
+                attacker_value = Evaluation.PIECE_VALUES.get(attacker[2], 0)
                 material_balance -= current_piece_value
                 current_piece_value = attacker_value
                 

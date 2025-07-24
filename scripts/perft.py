@@ -50,7 +50,7 @@ class PerftTest:
         
         for move in moves:
             # Make the move on a copy of the board
-            board_copy = self.copy_board(board)
+            board_copy = board.copy()
             self.make_move(board_copy, move)
             
             # Recursively count nodes from this position
@@ -80,7 +80,7 @@ class PerftTest:
         
         for move in moves:
             # Make the move on a copy of the board
-            board_copy = self.copy_board(board)
+            board_copy = board.copy()
             self.make_move(board_copy, move)
             
             # Count nodes for this specific root move
@@ -123,7 +123,7 @@ class PerftTest:
         # Filter out moves that would leave the king in check
         legal_moves = []
         for move in pseudo_legal_moves:
-            board_copy = self.copy_board(board)
+            board_copy = board.copy()
             original_player = board_copy.next_player  # Store the player before making the move
             self.make_move(board_copy, move)
             
@@ -179,10 +179,6 @@ class PerftTest:
             # Switch to the other player
             board.next_player = 'black' if board.next_player == 'white' else 'white'
     
-    def copy_board(self, board: Board) -> Board:
-        """Use the standard board copy method."""
-        return board.copy()
-
     def find_king(self, board: Board, color: str) -> Optional[Tuple[int, int]]:
         """Find the king of given color."""
         for row in range(8):

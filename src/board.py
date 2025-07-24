@@ -284,24 +284,6 @@ class Board:
             if filter_checks and self.in_check(piece, move):
                 continue
             piece.add_move(move)
-            
-    def evaluate_material(self) -> Tuple[float, float]:
-        """
-        Calculate material balance for both sides.
-        Returns tuple of (white_score, black_score) based on piece values.
-        """
-        white_score = 0.0
-        black_score = 0.0
-        for row in range(ROWS):
-            for col in range(COLS):
-                square = self.squares[row][col]
-                if square.has_piece and square.piece:
-                    # Sum up piece values, excluding kings (value >= 10)
-                    if square.piece.color == 'white' and square.piece.value < 10:
-                        white_score += square.piece.value
-                    elif square.piece.color == 'black' and square.piece.value > -10:
-                        black_score += square.piece.value
-        return white_score, black_score
 
     def _create(self) -> None:
         """Initialize the 8x8 board with empty squares and starting pieces."""
@@ -639,22 +621,3 @@ class Board:
             return '1/2-1/2'
         else:
             return '*'
-
-    def evaluate_position(self) -> float:
-        """
-        Basic position evaluation for AI.
-        Returns positive values for white advantage, negative for black advantage.
-        """
-        score = 0.0
-        
-        # Material evaluation
-        for row in range(ROWS):
-            for col in range(COLS):
-                square = self.squares[row][col]
-                if square.has_piece and square.piece:
-                    piece = square.piece
-                    # Use the piece's inherent value (already has color sign)
-                    if abs(piece.value) < 1000:  # Exclude king from material count
-                        score += piece.value
-        
-        return score
