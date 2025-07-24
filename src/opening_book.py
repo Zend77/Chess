@@ -9,11 +9,10 @@ import random
 class OpeningBook:
     """
     Comprehensive opening book implementation with deep opening knowledge.
-    Emphasizes sound opening principles and punishes premature queen development.
+    Emphasizes sound opening principles.
     """
     
     def __init__(self):
-        # Comprehensive opening book with deeper lines
         # Format: FEN -> list of good moves with weights
         self.book = {
             # Starting position - sound first moves for white
@@ -592,10 +591,6 @@ class OpeningBook:
             "rnbqkbnr/ppp2ppp/3p4/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 3": [
                 ("d2d4", 35), ("f1c4", 25), ("b1c3", 20), ("c2c3", 15), ("h2h3", 5)
             ],
-            
-            # =========================
-            # ADDITIONAL GOOD MOVES (previously misplaced)
-            # =========================
             
             # Queen's Gambit Declined: 1.d4 d5 2.c4 e6 3.Nc3
             "rnbqkbnr/ppp2ppp/4p3/3p4/2PP4/2N5/PP2PPPP/R1BQKBNR b KQkq - 1 3": [
