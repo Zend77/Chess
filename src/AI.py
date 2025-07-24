@@ -24,6 +24,10 @@ class AI:
         # Configure AI based on difficulty
         self.depth, self.time_limit = self._get_difficulty_settings(difficulty)
     
+    def set_debug_mode(self, enabled: bool):
+        """Enable or disable debug mode to show evaluation calculations."""
+        self.search_engine.set_debug_mode(enabled)
+    
     def _get_difficulty_settings(self, difficulty: str) -> Tuple[int, float]:
         """Get search depth and time limit based on difficulty level."""
         settings = {

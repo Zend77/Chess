@@ -112,10 +112,42 @@ class Main:
                             game.game_over = True
                         else:
                             game.draw_offered = True
+                    elif event.key == p.K_v and not game.game_over:
+                        # Toggle AI debug mode (verbose evaluation)
+                        if game.ai:
+                            current_debug = getattr(game.ai.search_engine, 'debug_mode', False)
+                            game.ai.set_debug_mode(not current_debug)
+                            debug_status = "ON" if not current_debug else "OFF"
+                            print(f"\n🔍 AI Debug Mode: {debug_status}")
+                            if not current_debug:
+                                print("Press 'V' again to disable debug output")
+                            print("-" * 50)
+                        else:
+                            print("❌ No AI enabled - press 'G' to enable AI first")
                     elif event.key == p.K_f and not game.game_over:
                         # Load position from FEN notation
                         fen_str = input("Enter FEN: ")
                         game.load_fen(fen_str)
+                    elif event.key == p.K_h:
+                        # Show help/controls
+                        print("\n" + "=" * 50)
+                        print("CHESS GAME CONTROLS")
+                        print("=" * 50)
+                        print("🎮 GAME CONTROLS:")
+                        print("   Mouse: Click and drag to move pieces")
+                        print("   R: Reset game")
+                        print("   G: Toggle AI opponent on/off")
+                        print("   ← →: Undo/Redo moves")
+                        print("   T: Change visual theme")
+                        print("   D: Offer draw (press twice to accept)")
+                        print("   F: Load position from FEN")
+                        print("   H: Show this help")
+                        print("\n🔍 AI DEBUG MODE:")
+                        print("   V: Toggle AI evaluation debug (shows calculations)")
+                        print("      - See all moves the AI considers")
+                        print("      - Breakdown by evaluation components")
+                        print("      - Understand AI decision making")
+                        print("=" * 50 + "\n")
                 elif event.type == p.QUIT:
                     running = False
 

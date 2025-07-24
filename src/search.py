@@ -10,6 +10,7 @@ from board import Board
 from move import Move
 from piece import Piece, King
 from evaluation import Evaluation
+from see import SEE
 
 class SearchResult:
     """Container for search results."""
@@ -32,6 +33,11 @@ class Search:
         self.max_depth = 4   # Reduced depth for Python performance
         self.transposition_table = {}  # Simple transposition table
         self.killer_moves = {}  # Killer move heuristic
+        self.debug_mode = False  # Flag to show evaluation calculations
+        
+    def set_debug_mode(self, enabled: bool):
+        """Enable or disable debug mode to show evaluation calculations."""
+        self.debug_mode = enabled
         
     def search(self, board: Board, depth: int = 4, max_time: float = 2.0) -> SearchResult:
         """
@@ -112,9 +118,13 @@ class Search:
         return best_result
     
     def _minimax_root(self, board: Board, depth: int) -> SearchResult:
-        """Root minimax call for the current player."""
+        """Root minimax call for the current player with proper alpha-beta."""
         best_move = None
         current_player = board.next_player  # Store BEFORE making moves
+        
+        # Initialize alpha-beta window
+        alpha = -inf
+        beta = inf
         
         # Since evaluation is always from white's perspective:
         # - White wants to MAXIMIZE the evaluation score
@@ -136,7 +146,15 @@ class Search:
                 score = 0
             return SearchResult(None, score, depth)
         
-        for piece, move in moves:
+        if self.debug_mode:
+            print(f"\n{'='*60}")
+            print(f"AI Evaluation Debug - {current_player.upper()} to move")
+            print(f"Analyzing {len(moves)} possible moves at depth {depth}")
+            print(f"{'='*60}")
+        
+        move_evaluations = []  # Store move evaluations for debug display
+        
+        for i, (piece, move) in enumerate(moves):
             if self._should_stop():
                 raise TimeoutError("Search time limit exceeded")
             
@@ -144,20 +162,44 @@ class Search:
             move_info = board.make_move_fast(piece, move)
             
             try:
-                # After making the move, the position is evaluated from white's perspective
-                # But we need to continue the search from the opponent's perspective with proper bounds
+                # After making the move, continue search with proper alpha-beta bounds
                 if current_player == 'white':
                     # White made a move, now it's black's turn to respond (minimize)
-                    score = self._minimax(board, depth - 1, -inf, inf, False, allow_null=True)
+                    score = self._minimax(board, depth - 1, alpha, beta, False, allow_null=True)
                     if score > best_score:
                         best_score = score
                         best_move = move
+                        alpha = max(alpha, score)  # Update alpha for next moves
                 else:
                     # Black made a move, now it's white's turn to respond (maximize)  
-                    score = self._minimax(board, depth - 1, -inf, inf, True, allow_null=True)
+                    score = self._minimax(board, depth - 1, alpha, beta, True, allow_null=True)
+                    
                     if score < best_score:
                         best_score = score
                         best_move = move
+                        beta = min(beta, score)  # Update beta for next moves
+                
+                # Store for debug display
+                if self.debug_mode:
+                    move_str = f"{piece.name.capitalize()}{chr(97 + move.initial.col)}{8 - move.initial.row}-{chr(97 + move.final.col)}{8 - move.final.row}"
+                    if move.captured:
+                        move_str += f"x{move.captured.name}"
+                    
+                    # Get detailed evaluation breakdown
+                    components = Evaluation.evaluate_debug(board)
+                    
+                    move_evaluations.append({
+                        'move': move_str,
+                        'score': score,
+                        'components': components,
+                        'is_best': (move == best_move)
+                    })
+                    
+                # Alpha-beta cutoff at root level
+                if alpha >= beta:
+                    board.unmake_move_fast(piece, move, move_info)
+                    break  # Prune remaining moves
+                    
             except TimeoutError:
                 # Always unmake the move before re-raising timeout
                 board.unmake_move_fast(piece, move, move_info)
@@ -165,6 +207,10 @@ class Search:
             
             # Undo the move
             board.unmake_move_fast(piece, move, move_info)
+        
+        # Display debug information
+        if self.debug_mode and move_evaluations and best_move:
+            self._display_move_evaluations(move_evaluations, current_player, best_move)
         
         # Return the score from the correct perspective
         # Since evaluation is always from white's perspective, we need to return
@@ -201,9 +247,8 @@ class Search:
         
         # Terminal conditions
         if depth == 0:
-            # SIMPLIFIED: Direct evaluation instead of expensive quiescence
-            # The quiescence search was calling get_all_moves() which is very slow
-            score = Evaluation.evaluate(board)
+            # Use quiescence search to avoid horizon effect
+            score = self._quiescence_search_simple(board, alpha, beta, maximizing, 0)
             self._store_transposition_simple(board_hash, depth, score)
             return score
         
@@ -390,43 +435,74 @@ class Search:
                 'score': score
             }
     
-    def _quiescence_search_simple(self, board: Board, alpha: float, beta: float, maximizing: bool) -> float:
-        """Ultra-simple quiescence - only check obvious captures."""
+    def _quiescence_search_simple(self, board: Board, alpha: float, beta: float, maximizing: bool, depth: int = 0) -> float:
+        """
+        Proper quiescence search with recursion to handle capture sequences.
+        This will catch defended pieces and recaptures.
+        """
+        # Prevent infinite recursion in complex tactical sequences
+        if depth > 8:
+            return Evaluation.evaluate(board)
+            
+        # Stand pat evaluation - can we achieve cutoff without any moves?
         stand_pat = Evaluation.evaluate(board)
         
-        # Stand pat cutoffs
-        if maximizing and stand_pat >= beta:
-            return beta
-        if not maximizing and stand_pat <= alpha:
-            return alpha
+        if maximizing:
+            if stand_pat >= beta:
+                return beta
+            alpha = max(alpha, stand_pat)
+        else:
+            if stand_pat <= alpha:
+                return alpha
+            beta = min(beta, stand_pat)
             
-        # Only look at captures of high-value pieces
+        # Get only capture moves for quiescence
         current_player = 'white' if maximizing else 'black'
-        moves = board.get_all_moves(current_player)
+        captures = self._get_capture_moves_simple(board, current_player)
         
-        best_score = stand_pat
-        
-        for piece, move in moves:
-            # Only consider captures of queen/rook for speed
-            if move.captured and move.captured.name in ('queen', 'rook'):
+        # If no captures, return stand pat
+        if not captures:
+            return stand_pat
+            
+        for piece, move in captures:
+            # SEE pruning: skip obviously bad captures in quiescence
+            # But only if we're not in check (bad captures might be forced)
+            if depth > 0:  # Only prune deeper in qsearch
+                see_value = SEE.evaluate_capture(board, move)
+                if see_value < -50:  # Allow small losses for tactics
+                    continue
+            
+            try:
+                move_info = board.make_move_fast(piece, move)
+                # RECURSIVE call - this will catch recaptures!
+                score = self._quiescence_search_simple(board, alpha, beta, not maximizing, depth + 1)
+                board.unmake_move_fast(piece, move, move_info)
+            except:
                 try:
-                    move_info = board.make_move_fast(piece, move)
-                    score = Evaluation.evaluate(board)  # Just static eval, no recursion
                     board.unmake_move_fast(piece, move, move_info)
-                except TimeoutError:
-                    board.unmake_move_fast(piece, move, move_info)
-                    raise
+                except:
+                    pass
+                continue
                 
-                if maximizing:
-                    best_score = max(best_score, score)
-                    if best_score >= beta:
-                        return beta
-                else:
-                    best_score = min(best_score, score)
-                    if best_score <= alpha:
-                        return alpha
+            if maximizing:
+                if score >= beta:
+                    return beta
+                alpha = max(alpha, score)
+            else:
+                if score <= alpha:
+                    return alpha
+                beta = min(beta, score)
         
-        return best_score
+        return alpha if maximizing else beta
+    
+    def _get_capture_moves_simple(self, board: Board, color: str) -> list:
+        """Get only capture moves for simple quiescence search."""
+        captures = []
+        moves = board.get_all_moves(color)
+        for piece, move in moves:
+            if move.captured is not None:
+                captures.append((piece, move))
+        return captures
     
     def _store_transposition(self, board_hash: int, depth: int, score: float, entry_type: str):
         """Store position in transposition table."""
@@ -445,37 +521,155 @@ class Search:
                 del self.transposition_table[key]
     
     def _get_ordered_moves(self, board: Board, color: str) -> List[Tuple[Piece, Move]]:
-        """Get moves with ultra-fast ordering optimized for Python."""
+        """ENHANCED move ordering prioritizing good captures and tactical moves."""
         moves = board.get_all_moves(color)
         
         if not moves:
             return []
         
-        # In Python, sorting is expensive. Just separate captures vs non-captures
-        # This gives us 80% of the benefit with 20% of the cost
-        captures = []
-        quiet_moves = []
+        # Separate moves by type for better ordering
+        winning_captures = []  # SEE > 100 (clearly winning)
+        equal_captures = []    # SEE >= 0 but <= 100 (equal exchanges)
+        losing_captures = []   # SEE < 0 (losing captures) 
+        tactical_moves = []    # Checks, threats, etc.
+        quiet_moves = []       # Regular development/positional moves
         
         for piece, move in moves:
-            if move.captured:  # Faster than calling is_capture()
-                # Simple capture priority: victim value minus attacker value
-                victim_val = 900 if move.captured.name == 'queen' else \
-                           500 if move.captured.name == 'rook' else \
-                           300 if move.captured.name in ('knight', 'bishop') else 100
-                attacker_val = 900 if piece.name == 'queen' else \
-                             500 if piece.name == 'rook' else \
-                             300 if piece.name in ('knight', 'bishop') else 100
-                captures.append((victim_val - attacker_val, piece, move))
+            if move.captured:  # It's a capture
+                # Use SEE to evaluate the capture
+                see_value = SEE.evaluate_capture(board, move)
+                
+                # CRITICAL: Prioritize clearly winning captures first
+                if see_value > 100:  # More than a pawn ahead
+                    winning_captures.append((see_value, piece, move))
+                elif see_value >= 0:  # Breaking even or small advantage
+                    equal_captures.append((see_value, piece, move))
+                else:  # Losing material
+                    losing_captures.append((see_value, piece, move))
             else:
-                quiet_moves.append((0, piece, move))
+                # Check if it's a tactical move (check, threat, etc.)
+                is_tactical = self._is_tactical_move(board, piece, move)
+                if is_tactical:
+                    score = self._score_tactical_move(board, piece, move)
+                    tactical_moves.append((score, piece, move))
+                else:
+                    # Score quiet moves with simple heuristics
+                    score = self._score_quiet_move(board, piece, move)
+                    quiet_moves.append((score, piece, move))
         
-        # Only sort captures (much smaller list)
-        captures.sort(reverse=True, key=lambda x: x[0])
+        # Sort each category by score (best first)
+        winning_captures.sort(reverse=True, key=lambda x: x[0])
+        equal_captures.sort(reverse=True, key=lambda x: x[0])
+        losing_captures.sort(reverse=True, key=lambda x: x[0])  # Even bad captures might be good in some positions
+        tactical_moves.sort(reverse=True, key=lambda x: x[0])
+        quiet_moves.sort(reverse=True, key=lambda x: x[0])
         
-        # Return format without score
-        result = [(piece, move) for _, piece, move in captures]
-        result.extend([(piece, move) for _, piece, move in quiet_moves])
+        # OPTIMAL ORDERING: Best captures, tactics, quiet moves, then bad captures
+        result = []
+        
+        # 1. Clearly winning captures first (e.g., capturing undefended pieces)
+        for _, piece, move in winning_captures:
+            result.append((piece, move))
+        
+        # 2. Tactical moves (checks, pins, forks)
+        for _, piece, move in tactical_moves:
+            result.append((piece, move))
+            
+        # 3. Equal/small advantage captures
+        for _, piece, move in equal_captures:
+            result.append((piece, move))
+        
+        # 4. Quiet positional moves
+        for _, piece, move in quiet_moves:
+            result.append((piece, move))
+            
+        # 5. Bad captures last (might still be good in some tactical situations)
+        for _, piece, move in losing_captures:
+            result.append((piece, move))
+        
         return result
+    
+    def _score_quiet_move(self, board: Board, piece: Piece, move: Move) -> int:
+        """Score non-capture moves for ordering."""
+        score = 0
+        
+        # Center control bonus
+        if 2 <= move.final.row <= 5 and 2 <= move.final.col <= 5:
+            score += 20
+            
+        # Development bonus for knights and bishops
+        if piece.name in ['knight', 'bishop']:
+            if (piece.color == 'white' and move.initial.row == 7) or \
+               (piece.color == 'black' and move.initial.row == 0):
+                score += 15
+                
+        # Check for castling (king moving 2 squares)
+        if piece.name == 'king' and abs(move.final.col - move.initial.col) == 2:
+            score += 50
+            
+        # Forward pawn moves
+        if piece.name == 'pawn':
+            direction = -1 if piece.color == 'white' else 1
+            if move.final.row == move.initial.row + direction:
+                score += 10
+                
+        return score
+        if piece.name in ['knight', 'bishop']:
+            if (piece.color == 'white' and move.initial.row == 7) or \
+               (piece.color == 'black' and move.initial.row == 0):
+                score += 15
+                
+        # Check for castling (king moving 2 squares)
+        if piece.name == 'king' and abs(move.final.col - move.initial.col) == 2:
+            score += 50
+            
+        # Forward pawn moves
+        if piece.name == 'pawn':
+            direction = -1 if piece.color == 'white' else 1
+            if move.final.row == move.initial.row + direction:
+                score += 10
+                
+        return score
+    
+    def _is_tactical_move(self, board: Board, piece: Piece, move: Move) -> bool:
+        """Check if a move is tactical (checks, pins, discovered attacks, etc.)."""
+        # Make the move temporarily to check for tactics
+        move_info = board.make_move_fast(piece, move)
+        
+        try:
+            opponent_color = 'black' if piece.color == 'white' else 'white'
+            
+            # Check if move gives check
+            if board.in_check_king(opponent_color):
+                return True
+                
+            # Check if move creates a discovered attack
+            # (This is simplified - full implementation would be more complex)
+            
+            return False
+        finally:
+            board.unmake_move_fast(piece, move, move_info)
+    
+    def _score_tactical_move(self, board: Board, piece: Piece, move: Move) -> int:
+        """Score tactical moves."""
+        score = 0
+        
+        # Make the move temporarily to evaluate tactics
+        move_info = board.make_move_fast(piece, move)
+        
+        try:
+            opponent_color = 'black' if piece.color == 'white' else 'white'
+            
+            # Check bonus
+            if board.in_check_king(opponent_color):
+                score += 100
+                
+            # Future: Add bonuses for pins, forks, discovered attacks, etc.
+            
+        finally:
+            board.unmake_move_fast(piece, move, move_info)
+            
+        return score
     
     def _get_piece_value(self, piece_name: str) -> int:
         """Fast piece value lookup."""
@@ -831,3 +1025,36 @@ class Search:
     def _unmake_null_move(self, board: Board, original_player: str) -> None:
         """Unmake a null move (restore the original player)."""
         board.next_player = original_player
+    
+    def _display_move_evaluations(self, move_evaluations: List[dict], current_player: str, best_move: Move):
+        """Display detailed evaluation breakdown for each move."""
+        print(f"\nMove Evaluation Breakdown:")
+        print(f"{'Move':<12} {'Total':<8} {'Material':<8} {'Position':<8} {'Tactical':<8} {'Opening':<8} {'King':<8}")
+        print("-" * 80)
+        
+        # Sort moves by score (best first for current player)
+        if current_player == 'white':
+            move_evaluations.sort(key=lambda x: x['score'], reverse=True)
+        else:
+            move_evaluations.sort(key=lambda x: x['score'])
+        
+        for eval_data in move_evaluations[:10]:  # Show top 10 moves
+            move_str = eval_data['move']
+            score = eval_data['score']
+            components = eval_data['components']
+            
+            # Format components for display
+            material = components.get('material', 0) / 100.0
+            position = components.get('position', 0) / 100.0
+            tactical = components.get('tactical', 0) / 100.0
+            opening = components.get('opening', 0) / 100.0
+            king_safety = components.get('king_safety', 0) / 100.0
+            
+            # Mark the best move
+            marker = " ★" if eval_data.get('is_best', False) else "  "
+            
+            print(f"{move_str:<12} {score/100.0:+7.2f} {material:+7.2f} {position:+7.2f} {tactical:+7.2f} {opening:+7.2f} {king_safety:+7.2f}{marker}")
+        
+        print(f"\n★ = AI's chosen move")
+        print(f"Scores shown from White's perspective (+good for White, -good for Black)")
+        print("-" * 80)
