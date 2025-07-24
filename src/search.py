@@ -187,14 +187,25 @@ class Search:
                     if move.captured:
                         move_str += f"x{move.captured.name}"
                     
-                    # Get detailed evaluation breakdown
+                    # IMPORTANT: Get evaluation breakdown BEFORE undoing the move
+                    # The 'score' variable contains the result from deeper search
+                    # The 'components' will show the evaluation at the current position after this move
                     components = Evaluation.evaluate_debug(board)
+                    
+                    # Verify accuracy
+                    verification = Evaluation.verify_debug_accuracy(board)
+                    if not verification['matches']:
+                        print(f"⚠️ DEBUG ACCURACY WARNING for {move_str}: {verification.get('error_message', 'Unknown mismatch')}")
                     
                     move_evaluations.append({
                         'move': move_str,
-                        'score': score,
-                        'components': components,
-                        'is_best': (move == best_move)
+                        'move_obj': move,  # Store the actual move object for comparison
+                        'piece': piece,
+                        'score': score,  # This is from minimax search (may be from deeper levels)
+                        'components': components,  # This is static evaluation of current position
+                        'is_best': False,  # Will be updated after all moves are evaluated
+                        'verification': verification,
+                        'depth_used': depth  # Track what depth this score came from
                     })
                     
                 # Alpha-beta cutoff at root level
@@ -209,6 +220,17 @@ class Search:
             
             # Undo the move
             board.unmake_move_fast(piece, move, move_info)
+        
+        # Mark the actual best move in debug data
+        if self.debug_mode and move_evaluations and best_move:
+            for eval_data in move_evaluations:
+                # Compare moves properly
+                if (eval_data['move_obj'].initial.row == best_move.initial.row and
+                    eval_data['move_obj'].initial.col == best_move.initial.col and
+                    eval_data['move_obj'].final.row == best_move.final.row and
+                    eval_data['move_obj'].final.col == best_move.final.col):
+                    eval_data['is_best'] = True
+                    break
         
         # Display debug information
         if self.debug_mode and move_evaluations and best_move:
@@ -1029,10 +1051,10 @@ class Search:
         board.next_player = original_player
     
     def _display_move_evaluations(self, move_evaluations: List[dict], current_player: str, best_move: Move):
-        """Display detailed evaluation breakdown for each move."""
-        print(f"\nMove Evaluation Breakdown:")
-        print(f"{'Move':<12} {'Total':<8} {'Material':<8} {'Position':<8} {'Tactical':<8} {'Opening':<8} {'King':<8}")
-        print("-" * 80)
+        """Display enhanced evaluation breakdown for each move with complete transparency."""
+        print(f"\n" + "="*100)
+        print(f"🔍 DETAILED AI EVALUATION BREAKDOWN - {current_player.upper()} TO MOVE")
+        print(f"="*100)
         
         # Sort moves by score (best first for current player)
         if current_player == 'white':
@@ -1040,23 +1062,124 @@ class Search:
         else:
             move_evaluations.sort(key=lambda x: x['score'])
         
-        for eval_data in move_evaluations[:10]:  # Show top 10 moves
+        # Show the best move's complete breakdown first
+        if move_evaluations:
+            best_eval = next((eval_data for eval_data in move_evaluations if eval_data.get('is_best', False)), move_evaluations[0])
+            components = best_eval['components']
+            
+            print(f"\n🌟 BEST MOVE: {best_eval['move']} (Score: {best_eval['score']/100.0:+.2f})")
+            game_phase = str(components.get('game_phase', 'unknown')).upper()
+            print(f"Game Phase: {game_phase}")
+            print("-" * 100)
+            
+            # Create detailed breakdown table
+            print(f"{'Component':<20} {'Raw Value':<12} {'Weight':<8} {'Weighted':<12} {'Impact':<10}")
+            print("-" * 100)
+            
+            total_weighted = components.get('total', 0)
+            
+            # Show each component with its contribution
+            eval_components = [
+                ('Material', 'raw_material', 'weight_material', 'material'),
+                ('Position', 'raw_position', 'weight_position', 'position'),
+                ('King Safety', 'raw_king_safety', 'weight_king_safety', 'king_safety'),
+                ('Tempo Penalty', 'raw_tempo_penalty', 'weight_tempo_penalty', 'tempo_penalty'),
+                ('Hanging Pieces', 'raw_hanging_pieces', 'weight_hanging_pieces', 'hanging_pieces'),
+                ('Pawn Structure', 'raw_pawn_structure', 'weight_pawn_structure', 'pawn_structure'),
+                ('Piece Coordination', 'raw_piece_coordination', 'weight_piece_coordination', 'piece_coordination'),
+                ('Piece Activity', 'raw_piece_activity', 'weight_piece_activity', 'piece_activity'),
+                ('Tactical Themes', 'raw_tactical_enhanced', 'weight_tactical_enhanced', 'tactical_enhanced'),
+                ('Space Control', 'raw_space_control', 'weight_space_control', 'space_control'),
+                ('Opening Principles', 'raw_opening', 'weight_opening', 'opening'),
+                ('Endgame Factors', 'raw_endgame', 'weight_endgame', 'endgame')
+            ]
+            
+            for name, raw_key, weight_key, final_key in eval_components:
+                raw_val = components.get(raw_key, 0)
+                weight = components.get(weight_key, 0)
+                final_val = components.get(final_key, 0)
+                
+                # Skip components with zero weight
+                if weight == 0 and final_val == 0:
+                    continue
+                    
+                # Calculate percentage impact
+                impact_pct = (abs(final_val) / abs(total_weighted) * 100) if total_weighted != 0 else 0
+                
+                # Color code significant impacts
+                impact_str = f"{impact_pct:.1f}%"
+                if impact_pct > 20:
+                    impact_str = f"🔴 {impact_str}"
+                elif impact_pct > 10:
+                    impact_str = f"🟡 {impact_str}"
+                elif impact_pct > 5:
+                    impact_str = f"🟢 {impact_str}"
+                
+                print(f"{name:<20} {raw_val/100.0:+11.2f} {weight:7.1f} {final_val/100.0:+11.2f} {impact_str:<10}")
+            
+            print("-" * 100)
+            print(f"{'TOTAL':<20} {components.get('total_raw', 0)/100.0:+11.2f} {'N/A':<7} {total_weighted/100.0:+11.2f} {'100.0%':<10}")
+            
+            # Verification check
+            manual_total = sum(components.get(final_key, 0) for _, _, _, final_key in eval_components)
+            if abs(manual_total - total_weighted) > 0.01:
+                print(f"⚠️  WARNING: Total mismatch! Manual: {manual_total/100.0:+.2f}, Reported: {total_weighted/100.0:+.2f}")
+            
+            # Show verification status for this move
+            verification = best_eval.get('verification', {})
+            if not verification.get('matches', True):
+                print(f"⚠️  VERIFICATION WARNING: {verification.get('error_message', 'Unknown mismatch')}")
+            else:
+                print(f"✅ Verification: Debug breakdown matches actual evaluation")
+        
+        # Now show summary table of all moves
+        print(f"\n📊 MOVE COMPARISON TABLE:")
+        print(f"{'Move':<15} {'Total':<8} {'Material':<9} {'Hanging':<9} {'Position':<9} {'Tactical':<9} {'King':<8}")
+        print("-" * 100)
+        
+        # Count how many moves are marked as best (should be exactly 1)
+        best_count = sum(1 for eval_data in move_evaluations if eval_data.get('is_best', False))
+        if best_count != 1:
+            print(f"⚠️ DEBUG WARNING: {best_count} moves marked as best (should be 1)")
+        
+        for i, eval_data in enumerate(move_evaluations[:8]):  # Show top 8 moves
             move_str = eval_data['move']
-            score = eval_data['score']
             components = eval_data['components']
             
-            # Format components for display
+            total_score = components.get('total', 0) / 100.0
             material = components.get('material', 0) / 100.0
+            hanging = components.get('hanging_pieces', 0) / 100.0
             position = components.get('position', 0) / 100.0
-            tactical = components.get('tactical', 0) / 100.0
-            opening = components.get('opening', 0) / 100.0
+            tactical = components.get('tactical_enhanced', 0) / 100.0
             king_safety = components.get('king_safety', 0) / 100.0
             
-            # Mark the best move
-            marker = " ★" if eval_data.get('is_best', False) else "  "
+            # Mark the best move (should be exactly one)
+            if eval_data.get('is_best', False):
+                marker = " ⭐"
+            else:
+                marker = f" #{i+1}"
             
-            print(f"{move_str:<12} {score/100.0:+7.2f} {material:+7.2f} {position:+7.2f} {tactical:+7.2f} {opening:+7.2f} {king_safety:+7.2f}{marker}")
+            print(f"{move_str:<15} {total_score:+7.2f} {material:+8.2f} {hanging:+8.2f} {position:+8.2f} {tactical:+8.2f} {king_safety:+7.2f}{marker}")
         
-        print(f"\n★ = AI's chosen move")
-        print(f"Scores shown from White's perspective (+good for White, -good for Black)")
-        print("-" * 80)
+        # Show additional debug info about the best move
+        best_eval_data = next((eval_data for eval_data in move_evaluations if eval_data.get('is_best', False)), None)
+        if best_eval_data:
+            print(f"\n🔍 BEST MOVE ANALYSIS:")
+            print(f"   Move: {best_eval_data['move']}")
+            print(f"   Static Eval (components): {best_eval_data['components'].get('total', 0)/100.0:+.2f}")
+            print(f"   Minimax Score (depth {best_eval_data.get('depth_used', '?')}): {best_eval_data['score']/100.0:+.2f}")
+            
+            # Check if they match (they usually won't for deep searches)
+            score_diff = abs(best_eval_data['components'].get('total', 0) - best_eval_data['score'])
+            if score_diff > 0.01:
+                print(f"   📊 Score difference: {score_diff/100.0:.2f}")
+                print(f"   💡 This is normal - minimax looks ahead, static eval is immediate position")
+            else:
+                print(f"   ✅ Scores match (unusual for depth > 1)")
+        
+        print(f"\n💡 EVALUATION NOTES:")
+        print(f"   • Table shows STATIC evaluation of position after each move")
+        print(f"   • Minimax score includes looking ahead multiple moves")
+        print(f"   • Hanging Pieces weight is 5.0x (huge tactical penalty!)")
+        print(f"   • ⭐ = AI's chosen move based on minimax, not static eval")
+        print("="*100)

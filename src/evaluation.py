@@ -158,37 +158,142 @@ class Evaluation:
     @staticmethod
     def evaluate_debug(board) -> Dict[str, float]:
         """
-        Debug version that returns all evaluation components separately.
-        Uses the same weights as the main evaluation function.
+        Enhanced debug version that returns all evaluation components with raw values,
+        weights, and final weighted values for complete transparency.
         """
         game_phase = Evaluation._get_game_phase(board)
         
+        # Get raw values (before weighting)
+        raw_material = Evaluation.evaluate_material(board)
+        raw_position = Evaluation.evaluate_position(board, game_phase)
+        raw_king_safety = Evaluation.evaluate_king_safety(board, game_phase)
+        raw_tempo_penalty = Evaluation.evaluate_tempo_penalty(board)
+        raw_hanging_pieces = Evaluation.evaluate_hanging_pieces(board)
+        raw_pawn_structure = Evaluation.evaluate_pawn_structure(board)
+        raw_piece_coordination = Evaluation.evaluate_piece_coordination(board)
+        raw_piece_activity = Evaluation.evaluate_piece_activity_advanced(board, game_phase)
+        raw_tactical_enhanced = Evaluation.evaluate_tactical_themes_enhanced(board)
+        raw_space_control = Evaluation.evaluate_space_control(board, game_phase)
+        raw_opening = Evaluation.evaluate_opening_principles(board) if game_phase == 'opening' else 0.0
+        raw_endgame = Evaluation.evaluate_endgame_factors(board) if game_phase == 'endgame' else 0.0
+        
+        # Define weights (matching main evaluate function exactly)
+        weight_material = 1.0
+        weight_position = 0.6
+        weight_king_safety = 0.8 if game_phase == 'middlegame' else 0.5 if game_phase in ['opening', 'middlegame'] else 0.0
+        weight_tempo_penalty = 1.0
+        weight_hanging_pieces = 5.0
+        weight_pawn_structure = 0.5
+        weight_piece_coordination = 0.4
+        weight_piece_activity = 0.3
+        weight_tactical_enhanced = 0.4
+        weight_space_control = 0.2
+        weight_opening = 1.5 if game_phase == 'opening' else 0.0
+        weight_endgame = 1.0 if game_phase == 'endgame' else 0.0
+        
+        # Calculate weighted values
+        weighted_material = raw_material * weight_material
+        weighted_position = raw_position * weight_position
+        weighted_king_safety = raw_king_safety * weight_king_safety
+        weighted_tempo_penalty = raw_tempo_penalty * weight_tempo_penalty
+        weighted_hanging_pieces = raw_hanging_pieces * weight_hanging_pieces
+        weighted_pawn_structure = raw_pawn_structure * weight_pawn_structure
+        weighted_piece_coordination = raw_piece_coordination * weight_piece_coordination
+        weighted_piece_activity = raw_piece_activity * weight_piece_activity
+        weighted_tactical_enhanced = raw_tactical_enhanced * weight_tactical_enhanced
+        weighted_space_control = raw_space_control * weight_space_control
+        weighted_opening = raw_opening * weight_opening
+        weighted_endgame = raw_endgame * weight_endgame
+        
+        # Build comprehensive debug data
         components = {
-            'material': Evaluation.evaluate_material(board),
-            'position': Evaluation.evaluate_position(board, game_phase) * 0.6,
-            'king_safety': Evaluation.evaluate_king_safety(board, game_phase) * (0.8 if game_phase == 'middlegame' else 0.5),
-            'tempo_penalty': Evaluation.evaluate_tempo_penalty(board) * 1.0,
-            'hanging_pieces': Evaluation.evaluate_hanging_pieces(board) * 5.0,
-            'pawn_structure': Evaluation.evaluate_pawn_structure(board) * 0.5,
-            'piece_coordination': Evaluation.evaluate_piece_coordination(board) * 0.4,
-            'piece_activity': Evaluation.evaluate_piece_activity_advanced(board, game_phase) * 0.3,
-            'tactical_enhanced': Evaluation.evaluate_tactical_themes_enhanced(board) * 0.4,
-            'space_control': Evaluation.evaluate_space_control(board, game_phase) * 0.2,
+            # Meta information
+            'game_phase': game_phase,
+            
+            # Raw values (before weighting)
+            'raw_material': raw_material,
+            'raw_position': raw_position,
+            'raw_king_safety': raw_king_safety,
+            'raw_tempo_penalty': raw_tempo_penalty,
+            'raw_hanging_pieces': raw_hanging_pieces,
+            'raw_pawn_structure': raw_pawn_structure,
+            'raw_piece_coordination': raw_piece_coordination,
+            'raw_piece_activity': raw_piece_activity,
+            'raw_tactical_enhanced': raw_tactical_enhanced,
+            'raw_space_control': raw_space_control,
+            'raw_opening': raw_opening,
+            'raw_endgame': raw_endgame,
+            
+            # Weights used
+            'weight_material': weight_material,
+            'weight_position': weight_position,
+            'weight_king_safety': weight_king_safety,
+            'weight_tempo_penalty': weight_tempo_penalty,
+            'weight_hanging_pieces': weight_hanging_pieces,
+            'weight_pawn_structure': weight_pawn_structure,
+            'weight_piece_coordination': weight_piece_coordination,
+            'weight_piece_activity': weight_piece_activity,
+            'weight_tactical_enhanced': weight_tactical_enhanced,
+            'weight_space_control': weight_space_control,
+            'weight_opening': weight_opening,
+            'weight_endgame': weight_endgame,
+            
+            # Final weighted values (what actually contributes to score)
+            'material': weighted_material,
+            'position': weighted_position,
+            'king_safety': weighted_king_safety,
+            'tempo_penalty': weighted_tempo_penalty,
+            'hanging_pieces': weighted_hanging_pieces,
+            'pawn_structure': weighted_pawn_structure,
+            'piece_coordination': weighted_piece_coordination,
+            'piece_activity': weighted_piece_activity,
+            'tactical_enhanced': weighted_tactical_enhanced,
+            'space_control': weighted_space_control,
+            'opening': weighted_opening,
+            'endgame': weighted_endgame,
+            
+            # Calculate totals
+            'total_raw': (raw_material + raw_position + raw_king_safety + raw_tempo_penalty + 
+                         raw_hanging_pieces + raw_pawn_structure + raw_piece_coordination + 
+                         raw_piece_activity + raw_tactical_enhanced + raw_space_control + 
+                         raw_opening + raw_endgame),
+            'total': (weighted_material + weighted_position + weighted_king_safety + weighted_tempo_penalty +
+                     weighted_hanging_pieces + weighted_pawn_structure + weighted_piece_coordination +
+                     weighted_piece_activity + weighted_tactical_enhanced + weighted_space_control +
+                     weighted_opening + weighted_endgame)
         }
         
-        # Game phase specific components
-        if game_phase == 'opening':
-            components['opening'] = Evaluation.evaluate_opening_principles(board) * 1.5
-        else:
-            components['opening'] = 0.0
-            
-        if game_phase == 'endgame':
-            components['endgame'] = Evaluation.evaluate_endgame_factors(board) * 1.0
-        else:
-            components['endgame'] = 0.0
-            
-        components['total'] = sum(components.values())
         return components
+    
+    @staticmethod
+    def verify_debug_accuracy(board) -> Dict[str, float]:
+        """
+        Verify that debug breakdown matches actual evaluation.
+        Returns verification results and any discrepancies found.
+        """
+        # Get actual evaluation
+        actual_score = Evaluation.evaluate(board)
+        
+        # Get debug breakdown
+        debug_components = Evaluation.evaluate_debug(board)
+        debug_total = debug_components.get('total', 0)
+        
+        # Check for discrepancies
+        discrepancy = abs(actual_score - debug_total)
+        tolerance = 0.01  # Allow tiny floating point differences
+        
+        verification = {
+            'actual_score': actual_score,
+            'debug_total': debug_total,
+            'discrepancy': discrepancy,
+            'matches': discrepancy <= tolerance,
+            'tolerance': tolerance
+        }
+        
+        if not verification['matches']:
+            verification['error_message'] = f"MISMATCH: Actual={actual_score:.3f}, Debug={debug_total:.3f}, Diff={discrepancy:.3f}"
+        
+        return verification
     
     @staticmethod
     def evaluate_material(board) -> float:
