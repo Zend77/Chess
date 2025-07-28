@@ -33,7 +33,7 @@ class Search:
         self.max_depth = 4   # Reduced depth for Python performance
         self.transposition_table = {}  # Simple transposition table
         self.killer_moves = {}  # Killer move heuristic
-        self.debug_mode = False  # Flag to show evaluation calculations
+        self.debug_mode = False  # Disabled by default for performance
         
     def set_debug_mode(self, enabled: bool):
         """Enable or disable debug mode to show evaluation calculations."""
@@ -101,9 +101,20 @@ class Search:
                         print(f"  → Move changed from {best_result.best_move.to_algebraic()} to {result.best_move.to_algebraic()}")
                         print(f"  → Score changed from {best_result.score/100.0:+.2f} to {result.score/100.0:+.2f}")
                 
-                # If we found a mate, no need to search deeper
-                if abs(result.score) > 19000:
-                    print(f"Mate found at depth {current_depth}, stopping search")
+                # For mate verification, we need to search deeper to see defensive moves
+                if abs(result.score) >= 20000:
+                    min_mate_verification_depth = max(3, depth // 2)  # Reduced mate verification depth
+                    
+                    if current_depth >= min_mate_verification_depth:
+                        print(f"Mate verified at depth {current_depth} (score: {result.score/100.0:+.2f}), stopping search")
+                        break
+                    else:
+                        print(f"Potential mate at depth {current_depth} (score: {result.score/100.0:+.2f}), continuing to depth {min_mate_verification_depth} to verify")
+                        # Continue searching to verify the mate
+                
+                # Early termination for very good moves (performance optimization)
+                if current_depth >= 2 and abs(result.score) > 500:  # If we have a 5+ pawn advantage
+                    print(f"Large advantage found at depth {current_depth} (score: {result.score/100.0:+.2f}), stopping search for speed")
                     break
                     
             except TimeoutError:
@@ -119,6 +130,8 @@ class Search:
     
     def _minimax_root(self, board: Board, depth: int) -> SearchResult:
         """Root minimax call for the current player with proper alpha-beta."""
+        from evaluation import Evaluation  # Import at function start to avoid scoping issues
+        
         best_move = None
         current_player = board.next_player  # Store BEFORE making moves
         
@@ -154,7 +167,7 @@ class Search:
             print(f"Analyzing {len(moves)} possible moves at depth {depth}")
             print(f"{'='*60}")
         
-        move_evaluations = []  # Store move evaluations for debug display
+        move_evaluations = []  # Store move evaluations for debug display (only if debug enabled)
         
         for i, (piece, move) in enumerate(moves):
             if self._should_stop():
@@ -164,22 +177,42 @@ class Search:
             move_info = board.make_move_fast(piece, move)
             
             try:
+                # PERFORMANCE: Simplified blunder prevention - only check for major hanging pieces
+                if depth >= self.max_depth - 1:  # At or near root level
+                    # Quick check: is the moving piece going to a square attacked by a pawn?
+                    if self._is_square_attacked_by_pawns(board, move.final, piece.color):
+                        piece_value = self._get_piece_value(piece.name)
+                        if piece_value >= 300:  # Only reject hanging major pieces (not pawns)
+                            board.unmake_move_fast(piece, move, move_info)
+                            continue
+                
                 # After making the move, continue search with proper alpha-beta bounds
                 if current_player == 'white':
                     # White made a move, now it's black's turn to respond (minimize)
                     score = self._minimax(board, depth - 1, alpha, beta, False, allow_null=True)
+                    
+                    move_score = score  # Store the score for debug display
+                    
                     if score > best_score:
                         best_score = score
                         best_move = move
-                        alpha = max(alpha, score)  # Update alpha for next moves
+                        # Only update alpha for search efficiency - always update in non-debug mode
+                        # Note: In debug mode we disabled alpha-beta updates to get individual scores
+                        # but this may be causing search inconsistencies
+                        alpha = max(alpha, score)
                 else:
                     # Black made a move, now it's white's turn to respond (maximize)  
                     score = self._minimax(board, depth - 1, alpha, beta, True, allow_null=True)
                     
+                    move_score = score  # Store the score for debug display
+                    
                     if score < best_score:
                         best_score = score
                         best_move = move
-                        beta = min(beta, score)  # Update beta for next moves
+                        # Only update beta for search efficiency - always update in non-debug mode
+                        # Note: In debug mode we disabled alpha-beta updates to get individual scores  
+                        # but this may be causing search inconsistencies
+                        beta = min(beta, score)
                 
                 # Store for debug display
                 if self.debug_mode:
@@ -188,20 +221,28 @@ class Search:
                         move_str += f"x{move.captured.name}"
                     
                     # IMPORTANT: Get evaluation breakdown BEFORE undoing the move
-                    # The 'score' variable contains the result from deeper search
+                    # Use move_score (individual) instead of score (potentially modified by alpha-beta)
                     # The 'components' will show the evaluation at the current position after this move
                     components = Evaluation.evaluate_debug(board)
                     
                     # Verify accuracy
                     verification = Evaluation.verify_debug_accuracy(board)
                     if not verification['matches']:
-                        print(f"⚠️ DEBUG ACCURACY WARNING for {move_str}: {verification.get('error_message', 'Unknown mismatch')}")
+                        # Check for discrepancy
+                        actual_score = verification['actual_score']
+                        debug_total = components.get('total', 0)
+                        discrepancy = abs(actual_score - debug_total)
+                        tolerance = 0.01
+                        
+                        if discrepancy > tolerance:
+                            error_msg = f"MISMATCH: Actual={actual_score:.3f}, Debug={debug_total:.3f}, Diff={discrepancy:.3f}"
+                            print(f"⚠️ DEBUG ACCURACY WARNING for {move_str}: {error_msg}")
                     
                     move_evaluations.append({
                         'move': move_str,
                         'move_obj': move,  # Store the actual move object for comparison
                         'piece': piece,
-                        'score': score,  # This is from minimax search (may be from deeper levels)
+                        'score': move_score,  # Use individual move score, not alpha-beta modified score
                         'components': components,  # This is static evaluation of current position
                         'is_best': False,  # Will be updated after all moves are evaluated
                         'verification': verification,
@@ -241,7 +282,7 @@ class Search:
         # the score as-is (it's already in the right perspective)
         return SearchResult(best_move, best_score, depth)
     
-    def _minimax(self, board: Board, depth: int, alpha: float, beta: float, maximizing: bool, allow_null: bool = True) -> float:
+    def _minimax(self, board: Board, depth: int, alpha: float, beta: float, maximizing: bool, allow_null: bool = True, extension_count: int = 0) -> float:
         """
         Minimax algorithm with alpha-beta pruning, null move pruning, and late move reductions.
         
@@ -252,6 +293,7 @@ class Search:
             beta: Beta value for pruning
             maximizing: True if maximizing player (white), False for minimizing (black)
             allow_null: True if null move pruning is allowed (prevents double null moves)
+            extension_count: Number of extensions already applied (prevents infinite extension)
             
         Returns:
             Evaluation score of the position
@@ -264,6 +306,7 @@ class Search:
         
         # Check transposition table
         board_hash = self._hash_board_fast(board)
+        # Re-enabled transposition table for performance
         if board_hash in self.transposition_table:
             entry = self.transposition_table[board_hash]
             if entry['depth'] >= depth:
@@ -271,8 +314,10 @@ class Search:
         
         # Terminal conditions
         if depth == 0:
-            # Use quiescence search to avoid horizon effect
-            score = self._quiescence_search_simple(board, alpha, beta, maximizing, 0)
+            # CRITICAL: Always use the main evaluation function that includes hanging pieces
+            # This ensures consistency between search and static evaluation
+            # DISABLED: quiescence search for debugging - it was causing evaluation inconsistencies
+            score = Evaluation.evaluate(board)
             self._store_transposition_simple(board_hash, depth, score)
             return score
         
@@ -296,12 +341,12 @@ class Search:
                 self._store_transposition_simple(board_hash, depth, 0)
                 return 0  # Stalemate or draw
         
-        # Null Move Pruning - RE-ENABLED with proper sign handling
+        # Null Move Pruning - More aggressive for better performance
         current_player = 'white' if maximizing else 'black'
         in_check = board.in_check_king(current_player)
         
         if (allow_null and 
-            depth >= 3 and 
+            depth >= 2 and  # Reduced from 3 to 2 for more aggressive pruning
             not in_check and 
             not self._is_endgame(board)):
             
@@ -311,15 +356,15 @@ class Search:
             if not maximizing:  # Black's turn
                 current_eval = -current_eval
             
-            # Only try null move if position looks good (above beta)
-            if current_eval >= beta:
+            # More aggressive beta cutoff threshold
+            if current_eval >= beta - 50:  # Allow null move even when slightly below beta
                 # Make null move
                 original_player = self._make_null_move(board)
                 
                 try:
-                    # Search with reduced depth and narrow window
-                    # FIXED: Remove the incorrect negation - minimax returns values from White's perspective
-                    null_score = self._minimax(board, depth - 3, -beta, -beta + 1, not maximizing, allow_null=False)
+                    # Search with more aggressive reduction for speed
+                    reduction = min(4, depth // 2 + 1)  # More aggressive reduction
+                    null_score = self._minimax(board, depth - reduction, -beta, -beta + 1, not maximizing, allow_null=False, extension_count=extension_count)
                 except TimeoutError:
                     # Unmake null move on timeout
                     self._unmake_null_move(board, original_player)
@@ -355,12 +400,15 @@ class Search:
                 move_info = board.make_move_fast(piece, move)
                 try:
                     # WHITE's turn (maximizing): after move, BLACK responds (minimizing)
-                    eval_score = self._minimax(board, search_depth, alpha, beta, False, allow_null=True)
+                    eval_score = self._minimax(board, search_depth, alpha, beta, False, allow_null=True, extension_count=extension_count)
+                    
+                    # Hanging pieces are already evaluated in Evaluation.evaluate()
                     
                     # LMR Re-search: Only if we got a really good score and used reduction
                     if reduction > 0 and eval_score > alpha and search_depth < depth - 1:
                         # Re-search at full depth if the reduced search found a good move
-                        eval_score = self._minimax(board, depth - 1, alpha, beta, False, allow_null=True)
+                        full_eval_score = self._minimax(board, depth - 1, alpha, beta, False, allow_null=True)
+                        eval_score = full_eval_score
                     
                 except TimeoutError:
                     board.unmake_move_fast(piece, move, move_info)
@@ -395,12 +443,15 @@ class Search:
                 move_info = board.make_move_fast(piece, move)
                 try:
                     # BLACK's turn (minimizing): after move, WHITE responds (maximizing)
-                    eval_score = self._minimax(board, search_depth, alpha, beta, True, allow_null=True)
+                    eval_score = self._minimax(board, search_depth, alpha, beta, True, allow_null=True, extension_count=extension_count)
+                    
+                    # Hanging pieces are already evaluated in Evaluation.evaluate()
                     
                     # LMR Re-search: Only if we got a really good score and used reduction
                     if reduction > 0 and eval_score < beta and search_depth < depth - 1:
                         # Re-search at full depth if the reduced search found a good move
-                        eval_score = self._minimax(board, depth - 1, alpha, beta, True, allow_null=True)
+                        full_eval_score = self._minimax(board, depth - 1, alpha, beta, True, allow_null=True)
+                        eval_score = full_eval_score
                     
                 except TimeoutError:
                     board.unmake_move_fast(piece, move, move_info)
@@ -428,30 +479,38 @@ class Search:
         return best_score
     
     def _hash_board_fast(self, board: Board) -> int:
-        """Ultra-fast board hash - only hash piece positions, ignore details."""
+        """Ultra-fast board hash using bit operations."""
         hash_val = 0
+        shift = 0
+        
+        # More efficient hashing using bit operations
         for row in range(8):
             for col in range(8):
                 square = board.squares[row][col]
                 if square.has_piece and square.piece:
                     piece = square.piece
-                    # Simple hash: position * piece_type * color
-                    piece_code = 1 if piece.name == 'pawn' else \
-                               2 if piece.name == 'knight' else \
-                               3 if piece.name == 'bishop' else \
-                               4 if piece.name == 'rook' else \
-                               5 if piece.name == 'queen' else 6
-                    color_code = 10 if piece.color == 'white' else 20
-                    hash_val += (row * 8 + col + 1) * piece_code * color_code
+                    # Combine piece type (3 bits) + color (1 bit) + position (6 bits) = 10 bits per piece
+                    piece_code = (1 if piece.name == 'pawn' else 
+                                2 if piece.name == 'knight' else 
+                                3 if piece.name == 'bishop' else 
+                                4 if piece.name == 'rook' else 
+                                5 if piece.name == 'queen' else 6)
+                    color_bit = 0 if piece.color == 'white' else 8
+                    position = row * 8 + col
+                    
+                    piece_hash = (piece_code | color_bit) << shift
+                    hash_val ^= piece_hash ^ (position << (shift + 4))
+                    shift = (shift + 10) % 64  # Rotate shift to spread bits
         
-        # Include turn
+        # Include turn with a simple bit flip
         if board.next_player == 'black':
-            hash_val += 999999
+            hash_val ^= 0x5555555555555555  # XOR with pattern
             
         return hash_val
     
     def _store_transposition_simple(self, board_hash: int, depth: int, score: float):
         """Simple transposition table storage."""
+        # Re-enabled transposition table storage for performance
         # Only store if table isn't too big
         if len(self.transposition_table) < 50000:
             self.transposition_table[board_hash] = {
@@ -470,6 +529,13 @@ class Search:
             
         # Stand pat evaluation - can we achieve cutoff without any moves?
         stand_pat = Evaluation.evaluate(board)
+        
+        # DEBUG: Track quiescence search decisions
+        if depth == 0 and abs(stand_pat) > 200:  # Only debug significant positions
+            current_player = 'white' if maximizing else 'black'
+            print(f"🔍 Q-Search DEBUG (depth {depth}, {current_player}): stand_pat = {stand_pat/100.0:+.2f}")
+            captures = self._get_capture_moves_simple(board, current_player)
+            print(f"  📊 Found {len(captures)} captures: {[move.to_algebraic() for piece, move in captures[:5]]}")
         
         if maximizing:
             if stand_pat >= beta:
@@ -501,6 +567,13 @@ class Search:
                 # RECURSIVE call - this will catch recaptures!
                 score = self._quiescence_search_simple(board, alpha, beta, not maximizing, depth + 1)
                 board.unmake_move_fast(piece, move, move_info)
+                
+                # DEBUG: Track if this capture improved the score significantly
+                if depth == 0 and abs(stand_pat) > 200:  # Only debug significant positions
+                    improvement = score - stand_pat if maximizing else stand_pat - score
+                    if improvement > 100:  # More than 1 pawn improvement
+                        print(f"  🎯 Capture {move.to_algebraic()}: {stand_pat/100.0:+.2f} → {score/100.0:+.2f} (improvement: {improvement/100.0:+.2f})")
+                        
             except:
                 try:
                     board.unmake_move_fast(piece, move, move_info)
@@ -517,7 +590,15 @@ class Search:
                     return alpha
                 beta = min(beta, score)
         
-        return alpha if maximizing else beta
+        final_result = alpha if maximizing else beta
+        
+        # DEBUG: Show final quiescence result
+        if depth == 0 and abs(stand_pat) > 200:  # Only debug significant positions
+            improvement = final_result - stand_pat if maximizing else stand_pat - final_result
+            if abs(improvement) > 50:  # Significant change
+                print(f"  🏁 Q-Search FINAL: {stand_pat/100.0:+.2f} → {final_result/100.0:+.2f} (change: {improvement/100.0:+.2f})")
+            
+        return final_result
     
     def _get_capture_moves_simple(self, board: Board, color: str) -> list:
         """Get only capture moves for simple quiescence search."""
@@ -545,73 +626,69 @@ class Search:
                 del self.transposition_table[key]
     
     def _get_ordered_moves(self, board: Board, color: str) -> List[Tuple[Piece, Move]]:
-        """ENHANCED move ordering prioritizing good captures and tactical moves."""
+        """FAST move ordering prioritizing good captures and tactical moves."""
         moves = board.get_all_moves(color)
         
         if not moves:
             return []
         
-        # Separate moves by type for better ordering
-        winning_captures = []  # SEE > 100 (clearly winning)
-        equal_captures = []    # SEE >= 0 but <= 100 (equal exchanges)
-        losing_captures = []   # SEE < 0 (losing captures) 
-        tactical_moves = []    # Checks, threats, etc.
-        quiet_moves = []       # Regular development/positional moves
+        # Quick separation with minimal expensive calculations
+        captures = []
+        non_captures = []
         
         for piece, move in moves:
-            if move.captured:  # It's a capture
-                # Use SEE to evaluate the capture
-                see_value = SEE.evaluate_capture(board, move)
+            if move.captured:
+                # Quick SEE evaluation - only for clearly winning/losing captures
+                captured_value = self._get_piece_value(move.captured.name)
+                attacker_value = self._get_piece_value(piece.name)
                 
-                # CRITICAL: Prioritize clearly winning captures first
-                if see_value > 100:  # More than a pawn ahead
-                    winning_captures.append((see_value, piece, move))
-                elif see_value >= 0:  # Breaking even or small advantage
-                    equal_captures.append((see_value, piece, move))
-                else:  # Losing material
-                    losing_captures.append((see_value, piece, move))
-            else:
-                # Check if it's a tactical move (check, threat, etc.)
-                is_tactical = self._is_tactical_move(board, piece, move)
-                if is_tactical:
-                    score = self._score_tactical_move(board, piece, move)
-                    tactical_moves.append((score, piece, move))
+                # Simple heuristic: if we're capturing something more valuable, prioritize
+                if captured_value >= attacker_value:
+                    score = captured_value * 10 + (1000 - attacker_value)  # MVV-LVA
+                    captures.append((score, piece, move))
                 else:
-                    # Score quiet moves with simple heuristics
-                    score = self._score_quiet_move(board, piece, move)
-                    quiet_moves.append((score, piece, move))
+                    # For questionable captures, do proper SEE but cache results
+                    see_value = SEE.evaluate_capture(board, move)
+                    score = see_value + captured_value  # Combine SEE with capture value
+                    captures.append((score, piece, move))
+            else:
+                # Quick scoring for non-captures
+                score = self._score_quiet_move_fast(board, piece, move)
+                non_captures.append((score, piece, move))
         
-        # Sort each category by score (best first)
-        winning_captures.sort(reverse=True, key=lambda x: x[0])
-        equal_captures.sort(reverse=True, key=lambda x: x[0])
-        losing_captures.sort(reverse=True, key=lambda x: x[0])  # Even bad captures might be good in some positions
-        tactical_moves.sort(reverse=True, key=lambda x: x[0])
-        quiet_moves.sort(reverse=True, key=lambda x: x[0])
+        # Sort by score (best first)
+        captures.sort(reverse=True, key=lambda x: x[0])
+        non_captures.sort(reverse=True, key=lambda x: x[0])
         
-        # OPTIMAL ORDERING: Best captures, tactics, quiet moves, then bad captures
+        # Return captures first, then non-captures
         result = []
-        
-        # 1. Clearly winning captures first (e.g., capturing undefended pieces)
-        for _, piece, move in winning_captures:
+        for _, piece, move in captures:
             result.append((piece, move))
-        
-        # 2. Tactical moves (checks, pins, forks)
-        for _, piece, move in tactical_moves:
-            result.append((piece, move))
-            
-        # 3. Equal/small advantage captures
-        for _, piece, move in equal_captures:
-            result.append((piece, move))
-        
-        # 4. Quiet positional moves
-        for _, piece, move in quiet_moves:
-            result.append((piece, move))
-            
-        # 5. Bad captures last (might still be good in some tactical situations)
-        for _, piece, move in losing_captures:
+        for _, piece, move in non_captures:
             result.append((piece, move))
         
         return result
+    
+    def _score_quiet_move_fast(self, board: Board, piece: Piece, move: Move) -> int:
+        """Fast scoring for non-capture moves."""
+        score = 0
+        
+        # Center control bonus (quick check)
+        row, col = move.final.row, move.final.col
+        if 2 <= row <= 5 and 2 <= col <= 5:
+            score += 20
+            
+        # Castling bonus
+        if piece.name == 'king' and abs(move.final.col - move.initial.col) == 2:
+            score += 50
+            
+        # Development bonus (only check if piece is on back rank)
+        if piece.name in ['knight', 'bishop']:
+            if (piece.color == 'white' and move.initial.row == 7) or \
+               (piece.color == 'black' and move.initial.row == 0):
+                score += 15
+                
+        return score
     
     def _score_quiet_move(self, board: Board, piece: Piece, move: Move) -> int:
         """Score non-capture moves for ordering."""
@@ -1023,20 +1100,19 @@ class Search:
     def _calculate_lmr_reduction(self, move_index: int, depth: int, is_dangerous: bool) -> int:
         """
         Calculate Late Move Reduction amount based on move characteristics.
-        Returns the reduction amount (0 = no reduction, 1+ = reduce by this amount).
+        More aggressive reduction for better pruning performance.
         """
-        if is_dangerous or move_index < 4:  # Don't reduce first 4 moves or dangerous moves
+        if is_dangerous or move_index < 3:  # Don't reduce first 3 moves or dangerous moves
             return 0
         
         if depth < 3:  # Don't reduce in shallow searches
             return 0
         
-        # Progressive reduction: later moves get reduced more
-        # Logarithmic reduction to avoid over-reducing
-        if move_index < 8:
-            return 1  # Small reduction for moves 4-7
-        elif move_index < 16:
-            return 2  # Medium reduction for moves 8-15
+        # More aggressive reduction for better performance
+        if move_index < 6:
+            return 1  # Small reduction for moves 3-5
+        elif move_index < 12:
+            return min(2, depth // 2)  # Medium reduction for moves 6-11
         else:
             return min(3, depth // 2)  # Larger reduction for later moves
     
@@ -1094,12 +1170,22 @@ class Search:
                 ('Endgame Factors', 'raw_endgame', 'weight_endgame', 'endgame')
             ]
             
+            # Add rescue bonus if present
+            if 'rescue_bonus' in components and components['rescue_bonus'] != 0:
+                eval_components.append(('Piece Rescue Bonus', 'rescue_bonus', 'rescue_bonus', 'rescue_bonus'))
+            
             for name, raw_key, weight_key, final_key in eval_components:
-                raw_val = components.get(raw_key, 0)
-                weight = components.get(weight_key, 0)
-                final_val = components.get(final_key, 0)
+                # Special handling for rescue bonus (it doesn't have separate raw/weight)
+                if name == 'Piece Rescue Bonus':
+                    final_val = components.get('rescue_bonus', 0)
+                    raw_val = final_val  # Same value
+                    weight = 1.0  # Always applied fully
+                else:
+                    raw_val = components.get(raw_key, 0)
+                    weight = components.get(weight_key, 0)
+                    final_val = components.get(final_key, 0)
                 
-                # Skip components with zero weight
+                # Skip components with zero weight and zero final value
                 if weight == 0 and final_val == 0:
                     continue
                     
@@ -1134,8 +1220,8 @@ class Search:
         
         # Now show summary table of all moves
         print(f"\n📊 MOVE COMPARISON TABLE:")
-        print(f"{'Move':<15} {'Total':<8} {'Material':<9} {'Hanging':<9} {'Position':<9} {'Tactical':<9} {'King':<8}")
-        print("-" * 100)
+        print(f"{'Move':<15} {'Minimax':<8} {'Static':<8} {'Material':<9} {'Hanging':<9} {'Position':<9} {'Tactical':<9} {'King':<8} {'Rescue':<8}")
+        print("-" * 110)
         
         # Count how many moves are marked as best (should be exactly 1)
         best_count = sum(1 for eval_data in move_evaluations if eval_data.get('is_best', False))
@@ -1146,12 +1232,14 @@ class Search:
             move_str = eval_data['move']
             components = eval_data['components']
             
-            total_score = components.get('total', 0) / 100.0
+            minimax_score = eval_data['score'] / 100.0  # Minimax search result
+            static_score = components.get('total', 0) / 100.0  # Static evaluation
             material = components.get('material', 0) / 100.0
             hanging = components.get('hanging_pieces', 0) / 100.0
             position = components.get('position', 0) / 100.0
             tactical = components.get('tactical_enhanced', 0) / 100.0
             king_safety = components.get('king_safety', 0) / 100.0
+            rescue_bonus = components.get('rescue_bonus', 0) / 100.0
             
             # Mark the best move (should be exactly one)
             if eval_data.get('is_best', False):
@@ -1159,7 +1247,7 @@ class Search:
             else:
                 marker = f" #{i+1}"
             
-            print(f"{move_str:<15} {total_score:+7.2f} {material:+8.2f} {hanging:+8.2f} {position:+8.2f} {tactical:+8.2f} {king_safety:+7.2f}{marker}")
+            print(f"{move_str:<15} {minimax_score:+7.2f} {static_score:+7.2f} {material:+8.2f} {hanging:+8.2f} {position:+8.2f} {tactical:+8.2f} {king_safety:+7.2f} {rescue_bonus:+7.2f}{marker}")
         
         # Show additional debug info about the best move
         best_eval_data = next((eval_data for eval_data in move_evaluations if eval_data.get('is_best', False)), None)
@@ -1178,8 +1266,72 @@ class Search:
                 print(f"   ✅ Scores match (unusual for depth > 1)")
         
         print(f"\n💡 EVALUATION NOTES:")
-        print(f"   • Table shows STATIC evaluation of position after each move")
-        print(f"   • Minimax score includes looking ahead multiple moves")
-        print(f"   • Hanging Pieces weight is 5.0x (huge tactical penalty!)")
-        print(f"   • ⭐ = AI's chosen move based on minimax, not static eval")
+        depth_info = best_eval_data.get('depth_used', '?') if best_eval_data else '?'
+        print(f"   • Minimax column: Score after looking ahead {depth_info} moves (AI uses this)")
+        print(f"   • Static column: Immediate evaluation of position after move")
+        print(f"   • Material/Hanging/etc: Components of the static evaluation")
+        print(f"   • ⭐ = AI's chosen move based on minimax score, not static eval")
+        print(f"   • Large differences between Minimax and Static reveal tactical themes!")
         print("="*100)
+
+    def _calculate_piece_rescue_bonus(self, board: Board, piece: Piece, move: Move, current_player: str, depth: int = 0) -> float:
+        """
+        Calculate bonus for moves that save hanging pieces.
+        
+        Args:
+            board: Current board position (after the move)
+            piece: The piece that was moved
+            move: The move that was made
+            current_player: The player who made the move
+            depth: Current search depth (for depth-based multiplier)
+            
+        Returns:
+            Bonus score for rescuing a hanging piece
+        """
+        # Check if the piece was hanging in its original position
+        original_row, original_col = move.initial.row, move.initial.col
+        
+        # Temporarily put the piece back to check if it was hanging
+        current_square = board.squares[move.final.row][move.final.col]
+        original_square = board.squares[original_row][original_col]
+        
+        # Temporarily restore original position
+        original_square.piece = piece
+        current_square.piece = move.captured  # Restore captured piece if any
+        
+        # Check if piece was hanging in original position
+        was_hanging = Evaluation._is_piece_hanging_at_position(board, piece, original_row, original_col)
+        
+        # Restore current position
+        current_square.piece = piece
+        original_square.piece = None
+        
+        if not was_hanging:
+            return 0.0  # Piece wasn't hanging originally, no rescue bonus
+        
+        # Check if piece is safe in new position
+        is_now_safe = not Evaluation._is_piece_hanging_at_position(board, piece, move.final.row, move.final.col)
+        
+        if is_now_safe:
+            # Piece was successfully rescued!
+            piece_value = Evaluation.SEE_PIECE_VALUES.get(piece.name, 100)
+            base_rescue_bonus = piece_value * 0.4  # 40% of piece value as base rescue bonus
+            
+            # Apply depth-based multiplier - stronger influence at shallow depths (near root)
+            # depth = 0 is leaf nodes, higher depth = closer to root
+            if depth is not None and hasattr(self, 'max_depth'):
+                # Create a multiplier that goes from 0.2 at depth=0 to 1.0 at max_depth
+                depth_ratio = min(depth / max(self.max_depth, 1), 1.0)
+                depth_multiplier = 0.2 + (0.8 * depth_ratio)  # Range: 0.2 to 1.0
+            else:
+                depth_multiplier = 1.0  # Full strength if depth not provided
+            
+            rescue_bonus = base_rescue_bonus * depth_multiplier
+            
+            # Apply bonus from the perspective of the moving player
+            if current_player == 'white':
+                return rescue_bonus  # Positive for white
+            else:
+                return -rescue_bonus  # Negative for white (black rescued a piece)
+        
+        return 0.0  # Piece moved but is still hanging

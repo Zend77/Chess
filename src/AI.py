@@ -16,29 +16,36 @@ class AI:
     """
     
     def __init__(self, color: Optional[str], difficulty: str = "medium"):
-        self.color = color  # 'white' or 'black' - which side the AI plays
-        self.difficulty = difficulty  # 'easy', 'medium', 'hard', 'expert'
+        self.color = color
+        self.difficulty = difficulty
         self.search_engine = Search()
         self.opening_book = OpeningBook()
         
         # Configure AI based on difficulty
         self.depth, self.time_limit = self._get_difficulty_settings(difficulty)
+        
+        # Performance optimized by default - debug mode disabled
+        self.search_engine.set_debug_mode(False)
     
     def set_debug_mode(self, enabled: bool):
         """Enable or disable debug mode to show evaluation calculations."""
         self.search_engine.set_debug_mode(enabled)
     
+    def enable_detailed_analysis(self):
+        """Enable detailed move analysis and debug output (slower but informative)."""
+        self.search_engine.set_debug_mode(True)
+    
     def _get_difficulty_settings(self, difficulty: str) -> Tuple[int, float]:
-        """Get search depth and time limit based on difficulty level."""
+        """Get search depth and time limit based on difficulty level - optimized for speed."""
         settings = {
-            'easy': (2, 15.0),       
-            'medium': (3, 15.0),    
-            'hard': (4, 30.0),        
-            'expert': (6, 45.0),
-            'master': (10, 60.0),
-            'grandmaster': (12, 120.0)    
+            'easy': (2, 2.0),        # Fast and simple
+            'medium': (3, 3.0),      # Good balance 
+            'hard': (4, 5.0),        # Strong play
+            'expert': (5, 8.0),      # Very strong
+            'master': (6, 12.0),     # Near-master level
+            'grandmaster': (7, 20.0) # Master level
         }
-        return settings.get(difficulty, (3, 2.0))
+        return settings.get(difficulty, (3, 3.0))
     
     def get_best_move(self, board, use_book=True) -> Tuple[Optional[Piece], Optional[Move]]:
         """

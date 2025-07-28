@@ -23,6 +23,17 @@ class Evaluation:
         'king': 20000
     }
     
+    # Pure material values for SEE calculation
+    # Used specifically for hanging pieces and exchange evaluation
+    SEE_PIECE_VALUES = {
+        'pawn': 100,
+        'knight': 320,
+        'bishop': 330,
+        'rook': 500,
+        'queen': 900,
+        'king': 20000
+    }
+    
     # Piece-Square Tables
     # Tables are oriented from WHITE's perspective (row 0 = rank 8, row 7 = rank 1)
     PAWN_TABLE = [
@@ -107,51 +118,83 @@ class Evaluation:
         """
         ENHANCED evaluation with advanced chess knowledge.
         Includes sophisticated positional understanding and tactical awareness.
+        Dynamically adjusts weights when hanging pieces are detected.
         """
         score = 0.0
         
-        # 1. MATERIAL - Most important, must be accurate
-        score += Evaluation.evaluate_material(board)
+        # 1. MATERIAL - Most important, must be accurate (weighted)
+        score += Evaluation.evaluate_material(board) * 1.7
         
         # 2. GAME PHASE DETECTION
         game_phase = Evaluation._get_game_phase(board)
         
-        # 3. POSITIONAL - Increased weight for better play
-        score += Evaluation.evaluate_position(board, game_phase) * 0.6
+        # 3. HANGING PIECES - Check first to adjust other weights if needed
+        hanging_penalty = Evaluation.evaluate_hanging_pieces(board)
         
-        # 4. OPENING PRINCIPLES - Fixed version with proper perspective
-        if game_phase == 'opening':
-            score += Evaluation.evaluate_opening_principles(board) * 1.5  # Increased importance
+        # 4. DYNAMIC WEIGHT ADJUSTMENT - Reduce other factors when pieces are hanging
+        has_hanging_pieces = abs(hanging_penalty) > 50  # Significant hanging piece penalty
         
-        # 5. KING SAFETY - More important in middlegame, scaled by game phase
-        if game_phase in ['opening', 'middlegame']:
+        # Adjust weights based on hanging pieces situation
+        if has_hanging_pieces:
+            # When pieces are hanging, prioritize tactics over positional play
+            position_weight = 0.1      # Reduced from 0.6 -> 0.3 -> 0.1
+            opening_weight = 0.05      # Reduced from 0.5 -> 0.2 -> 0.05
+            king_safety_weight = 0.1   # Reduced from 0.5/0.8 -> 0.3 -> 0.1
+            tempo_weight = 0.2         # Reduced from 1.0 -> 0.5 -> 0.2
+            pawn_structure_weight = 0.1 # Reduced from 0.5 -> 0.2 -> 0.1
+            coordination_weight = 0.1   # Reduced from 0.4 -> 0.2 -> 0.1
+            activity_weight = 0.05      # Reduced from 0.3 -> 0.1 -> 0.05
+            tactical_weight = 0.8       # Increased from 0.4 -> 0.6 -> 0.8
+            space_weight = 0.05         # Reduced from 0.2 -> 0.1 -> 0.05
+            hanging_weight = 6.0        # Increased from 3.0 -> 4.0 -> 6.0
+        else:
+            # Normal weights when no hanging pieces
+            position_weight = 0.6
+            opening_weight = 0.5
             king_safety_weight = 0.8 if game_phase == 'middlegame' else 0.5
+            tempo_weight = 1.0
+            pawn_structure_weight = 0.5
+            coordination_weight = 0.4
+            activity_weight = 0.3
+            tactical_weight = 0.4
+            space_weight = 0.2
+            hanging_weight = 3.0
+        
+        # 5. POSITIONAL - Weight adjusted based on hanging pieces
+        score += Evaluation.evaluate_position(board, game_phase) * position_weight
+        
+        # 6. OPENING PRINCIPLES - Weight adjusted based on hanging pieces
+        if game_phase == 'opening':
+            score += Evaluation.evaluate_opening_principles(board) * opening_weight
+        
+        # 7. KING SAFETY - Weight adjusted based on hanging pieces
+        if game_phase in ['opening', 'middlegame']:
             score += Evaluation.evaluate_king_safety(board, game_phase) * king_safety_weight
         
-        # 6. TEMPO PENALTY - Discourage moving same piece multiple times
-        score += Evaluation.evaluate_tempo_penalty(board) * 1.0
+        # 8. TEMPO PENALTY - Weight adjusted based on hanging pieces
+        score += Evaluation.evaluate_tempo_penalty(board) * tempo_weight
         
-        # 7. HANGING PIECES - Critical tactical detection  
-        score += Evaluation.evaluate_hanging_pieces(board) * 5.0  # MASSIVE penalty!
+        # 9. HANGING PIECES - Weight increased when pieces are hanging
+        score += hanging_penalty * hanging_weight
         
-        # 8. PAWN STRUCTURE - Critical for positional understanding
-        score += Evaluation.evaluate_pawn_structure(board) * 0.5
+        # 10. PAWN STRUCTURE - Weight adjusted based on hanging pieces
+        score += Evaluation.evaluate_pawn_structure(board) * pawn_structure_weight
         
-        # 9. PIECE COORDINATION - Important for piece harmony
-        score += Evaluation.evaluate_piece_coordination(board) * 0.4
+        # 11. PIECE COORDINATION - Weight adjusted based on hanging pieces
+        score += Evaluation.evaluate_piece_coordination(board) * coordination_weight
         
-        # 10. ADVANCED PIECE ACTIVITY - New enhanced mobility evaluation
-        score += Evaluation.evaluate_piece_activity_advanced(board, game_phase) * 0.3
+        # 12. ADVANCED PIECE ACTIVITY - Weight adjusted based on hanging pieces
+        score += Evaluation.evaluate_piece_activity_advanced(board, game_phase) * activity_weight
         
-        # 11. ENDGAME FACTORS - Important in endgame
+        # 13. ENDGAME FACTORS - Not affected by hanging pieces
         if game_phase == 'endgame':
             score += Evaluation.evaluate_endgame_factors(board) * 1.0
         
-        # 12. TACTICAL THEMES - Enhanced tactical detection
-        score += Evaluation.evaluate_tactical_themes_enhanced(board) * 0.4
+        # 14. TACTICAL THEMES - Weight increased when pieces are hanging
+        score += Evaluation.evaluate_tactical_themes_enhanced(board) * tactical_weight
         
-        # 13. SPACE CONTROL - New evaluation for territorial advantage
-        score += Evaluation.evaluate_space_control(board, game_phase) * 0.2
+        # 15. SPACE CONTROL - Weight adjusted based on hanging pieces
+        score += Evaluation.evaluate_space_control(board, game_phase) * space_weight
         
         return score
     
@@ -160,6 +203,7 @@ class Evaluation:
         """
         Enhanced debug version that returns all evaluation components with raw values,
         weights, and final weighted values for complete transparency.
+        Uses dynamic weights based on hanging pieces situation.
         """
         game_phase = Evaluation._get_game_phase(board)
         
@@ -175,20 +219,50 @@ class Evaluation:
         raw_tactical_enhanced = Evaluation.evaluate_tactical_themes_enhanced(board)
         raw_space_control = Evaluation.evaluate_space_control(board, game_phase)
         raw_opening = Evaluation.evaluate_opening_principles(board) if game_phase == 'opening' else 0.0
+        
+        # DYNAMIC WEIGHT ADJUSTMENT - Same logic as main evaluate function
+        has_hanging_pieces = abs(raw_hanging_pieces) > 50  # Significant hanging piece penalty
+        
+        # Adjust weights based on hanging pieces situation
+        if has_hanging_pieces:
+            # When pieces are hanging, prioritize tactics over positional play
+            # FIXED: Use exactly the same weights as main evaluate function
+            position_weight = 0.1      # Reduced from 0.6 -> 0.3 -> 0.1
+            opening_weight = 0.05      # Reduced from 0.5 -> 0.2 -> 0.05
+            king_safety_weight = 0.1   # Reduced from 0.5/0.8 -> 0.3 -> 0.1
+            tempo_weight = 0.2         # Reduced from 1.0 -> 0.5 -> 0.2
+            pawn_structure_weight = 0.1 # Reduced from 0.5 -> 0.2 -> 0.1
+            coordination_weight = 0.1   # Reduced from 0.4 -> 0.2 -> 0.1
+            activity_weight = 0.05      # Reduced from 0.3 -> 0.1 -> 0.05
+            tactical_weight = 0.8       # Increased from 0.4 -> 0.6 -> 0.8
+            space_weight = 0.05         # Reduced from 0.2 -> 0.1 -> 0.05
+            hanging_weight = 6.0        # Increased from 3.0 -> 4.0 -> 6.0
+        else:
+            # Normal weights when no hanging pieces
+            position_weight = 0.6
+            opening_weight = 0.5
+            king_safety_weight = 0.8 if game_phase == 'middlegame' else 0.5
+            tempo_weight = 1.0
+            pawn_structure_weight = 0.5
+            coordination_weight = 0.4
+            activity_weight = 0.3
+            tactical_weight = 0.4
+            space_weight = 0.2
+            hanging_weight = 3.0
         raw_endgame = Evaluation.evaluate_endgame_factors(board) if game_phase == 'endgame' else 0.0
         
-        # Define weights (matching main evaluate function exactly)
-        weight_material = 1.0
-        weight_position = 0.6
-        weight_king_safety = 0.8 if game_phase == 'middlegame' else 0.5 if game_phase in ['opening', 'middlegame'] else 0.0
-        weight_tempo_penalty = 1.0
-        weight_hanging_pieces = 5.0
-        weight_pawn_structure = 0.5
-        weight_piece_coordination = 0.4
-        weight_piece_activity = 0.3
-        weight_tactical_enhanced = 0.4
-        weight_space_control = 0.2
-        weight_opening = 1.5 if game_phase == 'opening' else 0.0
+        # Define weights using dynamic values (matching main evaluate function exactly)
+        weight_material = 1.7  # Material weight is always consistent
+        weight_position = position_weight
+        weight_king_safety = king_safety_weight if game_phase in ['opening', 'middlegame'] else 0.0
+        weight_tempo_penalty = tempo_weight
+        weight_hanging_pieces = hanging_weight
+        weight_pawn_structure = pawn_structure_weight
+        weight_piece_coordination = coordination_weight
+        weight_piece_activity = activity_weight
+        weight_tactical_enhanced = tactical_weight
+        weight_space_control = space_weight
+        weight_opening = opening_weight if game_phase == 'opening' else 0.0
         weight_endgame = 1.0 if game_phase == 'endgame' else 0.0
         
         # Calculate weighted values
@@ -1233,6 +1307,7 @@ class Evaluation:
         This is critical for preventing blunders like Ba6 where pieces get captured for free.
         """
         hanging_penalty = 0.0
+        debug_info = []  # For debugging large values
         
         for row in range(ROWS):
             for col in range(COLS):
@@ -1252,27 +1327,198 @@ class Evaluation:
                 hanging_value = Evaluation._calculate_hanging_value(board, piece, row, col)
                 
                 if hanging_value > 0:  # Piece is hanging (loses material)
+                    piece_pos = f"{chr(97+col)}{8-row}"
+                    
                     if piece.color == 'white':
                         hanging_penalty -= hanging_value  # Bad for white
+                        debug_info.append(f"White {piece.name} at {piece_pos} hanging: -{hanging_value}")
                     else:
                         hanging_penalty += hanging_value  # Good for white (black piece hanging)
+                        debug_info.append(f"Black {piece.name} at {piece_pos} hanging: +{hanging_value}")
         
         return hanging_penalty
 
     @staticmethod
+    def evaluate_piece_rescue_bonus(board, previous_board=None) -> float:
+        """
+        Evaluates bonus for moves that save hanging pieces.
+        Compares current position with previous position to detect rescued pieces.
+        
+        Args:
+            board: Current board position after the move
+            previous_board: Board position before the move (optional)
+            
+        Returns:
+            Bonus score for pieces that were rescued from hanging
+        """
+        if previous_board is None:
+            return 0.0
+            
+        rescue_bonus = 0.0
+        
+        # Compare each square to see if any previously hanging pieces are now safe
+        for row in range(ROWS):
+            for col in range(COLS):
+                current_square = board.squares[row][col]
+                previous_square = previous_board.squares[row][col]
+                
+                # Check if a piece moved TO this square (wasn't here before)
+                if (current_square.has_piece and current_square.piece and
+                    (not previous_square.has_piece or not previous_square.piece or
+                     previous_square.piece != current_square.piece)):
+                    
+                    piece = current_square.piece
+                    
+                    # Skip kings (they can't be hanging)
+                    if piece.name == 'king':
+                        continue
+                    
+                    # Check if this piece was hanging in its previous position
+                    # We need to find where this piece came from
+                    previous_pos = Evaluation._find_piece_previous_position(board, previous_board, piece, row, col)
+                    
+                    if previous_pos:
+                        prev_row, prev_col = previous_pos
+                        
+                        # Check if the piece was hanging in its previous position
+                        was_hanging = Evaluation._was_piece_hanging_at_position(previous_board, piece, prev_row, prev_col)
+                        
+                        # Check if the piece is safe in its current position
+                        is_now_safe = not Evaluation._is_piece_hanging_at_position(board, piece, row, col)
+                        
+                        if was_hanging and is_now_safe:
+                            # Piece was rescued! Give a bonus
+                            piece_value = Evaluation.SEE_PIECE_VALUES.get(piece.name, 100)
+                            rescue_bonus_value = piece_value * 0.5  # 50% of piece value as rescue bonus
+                            
+                            if piece.color == 'white':
+                                rescue_bonus += rescue_bonus_value  # Good for white
+                            else:
+                                rescue_bonus -= rescue_bonus_value  # Bad for white (black piece rescued)
+        
+        return rescue_bonus
+
+    @staticmethod
+    def _find_piece_previous_position(board, previous_board, piece: Piece, current_row: int, current_col: int) -> Optional[Tuple[int, int]]:
+        """
+        Find where a piece was located in the previous position.
+        
+        Args:
+            board: Current board
+            previous_board: Previous board state
+            piece: The piece to find
+            current_row, current_col: Current position of the piece
+            
+        Returns:
+            Tuple of (row, col) where the piece was previously, or None if not found
+        """
+        # Look for the same piece type and color that's not in the current position
+        for row in range(ROWS):
+            for col in range(COLS):
+                if row == current_row and col == current_col:
+                    continue  # Skip current position
+                    
+                prev_square = previous_board.squares[row][col]
+                if (prev_square.has_piece and prev_square.piece and
+                    prev_square.piece.name == piece.name and
+                    prev_square.piece.color == piece.color):
+                    
+                    # Check if this square is now empty or has a different piece
+                    current_square = board.squares[row][col]
+                    if (not current_square.has_piece or not current_square.piece or
+                        current_square.piece.name != piece.name or
+                        current_square.piece.color != piece.color):
+                        return (row, col)
+        
+        return None
+
+    @staticmethod
+    def _was_piece_hanging_at_position(board, piece: Piece, row: int, col: int) -> bool:
+        """Check if a piece was hanging at a specific position."""
+        hanging_value = Evaluation._calculate_hanging_value(board, piece, row, col)
+        return hanging_value > 0
+
+    @staticmethod
+    def _is_piece_hanging_at_position(board, piece: Piece, row: int, col: int) -> bool:
+        """Check if a piece is currently hanging at a specific position."""
+        hanging_value = Evaluation._calculate_hanging_value(board, piece, row, col)
+        return hanging_value > 0
+
+    @staticmethod
+    def _can_piece_escape_to_safety(board, piece: Piece, row: int, col: int, attacking_pieces: list) -> bool:
+        """
+        Check if a piece can move to a safe square (not attacked by any opponent piece).
+        
+        Args:
+            board: The chess board
+            piece: The piece that might escape
+            row, col: Current position of the piece
+            attacking_pieces: List of (piece, r, c, value) tuples of pieces attacking this square
+            
+        Returns:
+            True if the piece can move to at least one safe square, False otherwise
+        """
+        from rules import Rules
+        
+        # Generate all possible moves for this piece
+        possible_moves = Rules.generate_pseudo_legal_moves(board, piece, row, col)
+        
+        # Check each possible destination square
+        for move in possible_moves:
+            dest_row, dest_col = move.final.row, move.final.col
+            
+            # Temporarily make the move to check if destination is safe
+            original_piece_at_dest = board.squares[dest_row][dest_col].piece
+            
+            # Simulate the move
+            board.squares[row][col].piece = None
+            board.squares[dest_row][dest_col].piece = piece
+            
+            # Check if this square is attacked by any opponent piece
+            is_safe = True
+            opponent_color = 'black' if piece.color == 'white' else 'white'
+            
+            for r in range(8):
+                for c in range(8):
+                    sq = board.squares[r][c]
+                    if (sq.has_piece and sq.piece and 
+                        sq.piece.color == opponent_color and
+                        Evaluation._can_piece_attack(board, sq.piece, r, c, dest_row, dest_col)):
+                        is_safe = False
+                        break
+                if not is_safe:
+                    break
+            
+            # Restore the board
+            board.squares[row][col].piece = piece
+            board.squares[dest_row][dest_col].piece = original_piece_at_dest
+            
+            # If we found a safe square, the piece can escape
+            if is_safe:
+                return True
+        
+        # No safe squares found
+        return False
+
+    @staticmethod
     def _calculate_hanging_value(board, piece: Piece, row: int, col: int) -> float:
         """
-        Calculate how much material is lost if this piece is hanging.
-        Uses a SEE-like approach to determine if piece can be captured profitably.
-        Returns positive value if piece loses material when captured.
+        Calculate how much material is lost if this piece is truly hanging.
+        A piece is only considered hanging if:
+        1. It's attacked by a less valuable piece, AND
+        2. It cannot escape to safety
+        
+        This prevents mobile pieces like queens from being considered "hanging"
+        just because they're attacked - they can simply move away.
         """
         opponent_color = 'black' if piece.color == 'white' else 'white'
+        piece_value = Evaluation.SEE_PIECE_VALUES.get(piece.name, 100)
         
-        # Get all pieces that can attack this square
-        attackers = []
-        defenders = []
+        # Find the cheapest attacker and collect all attacking pieces
+        cheapest_attacker_value = float('inf')
+        has_attacker = False
+        attacking_pieces = []
         
-        # Find attackers and defenders
         for r in range(ROWS):
             for c in range(COLS):
                 sq = board.squares[r][c]
@@ -1281,25 +1527,63 @@ class Evaluation:
                     
                 attacking_piece = sq.piece
                 
-                if Evaluation._can_piece_attack(board, attacking_piece, r, c, row, col):
-                    piece_value = Evaluation.PIECE_VALUES.get(attacking_piece.name, 100)
+                if (attacking_piece.color == opponent_color and 
+                    Evaluation._can_piece_attack(board, attacking_piece, r, c, row, col)):
                     
-                    if attacking_piece.color == opponent_color:
-                        attackers.append((piece_value, attacking_piece.name))
-                    elif attacking_piece.color == piece.color and not (r == row and c == col):
-                        # Don't count the piece itself as a defender
-                        defenders.append((piece_value, attacking_piece.name))
+                    attacker_value = Evaluation.SEE_PIECE_VALUES.get(attacking_piece.name, 100)
+                    attacking_pieces.append((attacking_piece, r, c, attacker_value))
+                    
+                    if attacker_value < cheapest_attacker_value:
+                        cheapest_attacker_value = attacker_value
+                        has_attacker = True
         
-        if not attackers:
+        if not has_attacker:
             return 0.0  # No attackers, piece is safe
-            
-        # Sort by piece value (cheapest pieces attack/defend first)
-        attackers.sort(key=lambda x: x[0])
-        defenders.sort(key=lambda x: x[0])
         
-        # Simulate the exchange
-        piece_value = Evaluation.PIECE_VALUES.get(piece.name, 100)
-        return Evaluation._simulate_hanging_exchange(attackers, defenders, piece_value)
+        # If attacked by a more valuable piece, the piece is not really "hanging"
+        # (the attacker wouldn't want to trade)
+        if cheapest_attacker_value >= piece_value:
+            return 0.0
+        
+        # Check if the piece can escape to safety
+        # For all pieces, check if they can move to a safe square
+        can_escape = Evaluation._can_piece_escape_to_safety(board, piece, row, col, attacking_pieces)
+        
+        if can_escape:
+            # Piece can escape - incentivize moving it to safety
+            # Return a moderate penalty to encourage moving the piece
+            incentive_value = Evaluation.SEE_PIECE_VALUES[piece.name] * 0.3  # 30% of piece value as incentive
+            return incentive_value
+        
+        # Piece cannot escape safely - it will likely be lost
+        # Try to minimize the loss by considering if we can get compensation
+        
+        # Pawns are more likely to be truly hanging since they're less mobile
+        if piece.name == 'pawn':
+            # Check if defended
+            is_defended = False
+            for r in range(ROWS):
+                for c in range(COLS):
+                    sq = board.squares[r][c]
+                    if not sq.has_piece or not sq.piece:
+                        continue
+                        
+                    defending_piece = sq.piece
+                    
+                    if (defending_piece.color == piece.color and 
+                        not (r == row and c == col) and  # Don't count self
+                        Evaluation._can_piece_attack(board, defending_piece, r, c, row, col)):
+                        is_defended = True
+                        break
+                        
+                if is_defended:
+                    break
+            
+            if not is_defended:
+                # Undefended pawn attacked by cheaper piece is hanging
+                return piece_value
+        
+        return 0.0
     
     @staticmethod
     def _simulate_hanging_exchange(attackers: List, defenders: List, target_value: int) -> float:
@@ -1334,7 +1618,9 @@ class Evaluation:
             defender_turn = not defender_turn
         
         # Return loss for defending side (positive = defender loses material)
-        return max(0, material_balance)
+        final_result = max(0, material_balance)
+        
+        return final_result
     
     @staticmethod
     def _can_piece_attack(board, piece: Piece, from_row: int, from_col: int, to_row: int, to_col: int) -> bool:

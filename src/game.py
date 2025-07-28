@@ -28,7 +28,7 @@ class Game:
     dragger: Dragger
     config: Config
     fen_history: list[str]
-    redo_history: list[str]  # Track undone positions for redo functionality
+    redo_history: list[str]
 
     def __init__(self):
         self.next_player = 'white'  # White always moves first in chess
@@ -45,7 +45,7 @@ class Game:
         self.AI_color_prompt()  # Let user choose AI color - creates AI here
         self.board = Board()
         # Set up the standard starting position
-        self.board.set_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
+        self.board.set_fen("r1bqkb1r/1ppp1ppp/p1n2n2/1B2p3/4P3/2N2N2/PPPP1PPP/R1BQK2R w KQkq - 0 1")
         self.dragger = Dragger()  # Handles drag-and-drop piece movement
         self.config = Config()  # Visual themes and settings
         self.fen_history: list[str] = []  # Track position history for threefold repetition
