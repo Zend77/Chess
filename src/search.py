@@ -102,20 +102,26 @@ class Search:
                         print(f"  → Score changed from {best_result.score/100.0:+.2f} to {result.score/100.0:+.2f}")
                 
                 # For mate verification, we need to search deeper to see defensive moves
-                if abs(result.score) >= 20000:
-                    min_mate_verification_depth = max(3, depth // 2)  # Reduced mate verification depth
+                # Updated threshold to work with new mate scoring system (19999 instead of 20000)
+                if abs(result.score) >= 19990:  # Mate detected (allowing for mate distance variations)
+                    # For mate positions, we want to search deeper to find the fastest mate
+                    min_mate_verification_depth = max(4, depth - 1)  # Search deeper for mate verification
                     
-                    if current_depth >= min_mate_verification_depth:
+                    # Check if this is mate in 1 (the most urgent)
+                    mate_distance = 19999 - abs(result.score)
+                    is_mate_in_one = mate_distance <= 1
+                    
+                    if is_mate_in_one:
+                        print(f"Mate in 1 found at depth {current_depth} (score: {result.score/100.0:+.2f}), executing immediately")
+                        break
+                    elif current_depth >= min_mate_verification_depth:
                         print(f"Mate verified at depth {current_depth} (score: {result.score/100.0:+.2f}), stopping search")
                         break
                     else:
-                        print(f"Potential mate at depth {current_depth} (score: {result.score/100.0:+.2f}), continuing to depth {min_mate_verification_depth} to verify")
-                        # Continue searching to verify the mate
+                        print(f"Potential mate at depth {current_depth} (score: {result.score/100.0:+.2f}), continuing to depth {min_mate_verification_depth} to find fastest mate")
+                        # Continue searching to find the fastest mate sequence
                 
-                # Early termination for very good moves (performance optimization)
-                if current_depth >= 2 and abs(result.score) > 500:  # If we have a 5+ pawn advantage
-                    print(f"Large advantage found at depth {current_depth} (score: {result.score/100.0:+.2f}), stopping search for speed")
-                    break
+                # REMOVED: Early termination for advantage - was causing poor decisions
                     
             except TimeoutError:
                 print(f"Search timeout at depth {current_depth}, using depth {best_result.depth}")
@@ -153,13 +159,32 @@ class Search:
             # No legal moves available
             if board.in_check_king(current_player):
                 # Checkmate - bad for current player
-                # If White is checkmated, score should be very negative (bad for White)
-                # If Black is checkmated, score should be very positive (good for White)
-                score = -20000 if current_player == 'white' else 20000
+                # Use consistent mate scoring with distance preference
+                mate_distance = self.max_depth - depth  # Distance from root
+                if current_player == 'white':
+                    # White is checkmated (bad for white)
+                    score = -19999 + mate_distance
+                else:
+                    # Black is checkmated (good for white)
+                    score = 19999 - mate_distance
             else:
                 # Stalemate
                 score = 0
             return SearchResult(None, score, depth)
+        
+        # Quick check for immediate checkmate at root level
+        if depth == self.max_depth:  # Only at root level to avoid overhead
+            for piece, move in moves[:5]:  # Check first 5 moves from ordering (which prioritizes checkmates)
+                move_info = board.make_move_fast(piece, move)
+                try:
+                    opponent_color = 'black' if current_player == 'white' else 'white'
+                    if board.is_checkmate(opponent_color):
+                        # Found immediate checkmate!
+                        mate_score = 19999 if current_player == 'white' else -19999
+                        print(f"🎯 IMMEDIATE CHECKMATE FOUND: {move.to_algebraic()} (score: {mate_score/100.0:+.2f})")
+                        return SearchResult(move, mate_score, depth)
+                finally:
+                    board.unmake_move_fast(piece, move, move_info)
         
         if self.debug_mode:
             print(f"\n{'='*60}")
@@ -177,14 +202,18 @@ class Search:
             move_info = board.make_move_fast(piece, move)
             
             try:
-                # PERFORMANCE: Simplified blunder prevention - only check for major hanging pieces
+                # BLUNDER PREVENTION: Check for hanging pieces at root level (balanced approach)
                 if depth >= self.max_depth - 1:  # At or near root level
-                    # Quick check: is the moving piece going to a square attacked by a pawn?
-                    if self._is_square_attacked_by_pawns(board, move.final, piece.color):
-                        piece_value = self._get_piece_value(piece.name)
-                        if piece_value >= 300:  # Only reject hanging major pieces (not pawns)
-                            board.unmake_move_fast(piece, move, move_info)
-                            continue
+                    post_move_hanging = Evaluation.evaluate_hanging_pieces(board)
+                    
+                    # Only reject moves that hang pieces worth 2+ pawns (more conservative than before)
+                    hanging_threshold = 200  # 2 pawns instead of 2.5
+                    if current_player == 'white' and post_move_hanging < -hanging_threshold:
+                        board.unmake_move_fast(piece, move, move_info)
+                        continue
+                    elif current_player == 'black' and post_move_hanging > hanging_threshold:
+                        board.unmake_move_fast(piece, move, move_info)
+                        continue
                 
                 # After making the move, continue search with proper alpha-beta bounds
                 if current_player == 'white':
@@ -329,24 +358,30 @@ class Search:
         if board.is_game_over():
             if board.is_checkmate(current_player):
                 # Checkmate is bad for the current player
-                # Closer checkmates are worse (more urgent)
-                mate_penalty = (self.max_depth - depth)  # Closer = higher penalty
+                # Score mate based on distance: faster mates are better
+                mate_distance = self.max_depth - depth  # How many moves from root to mate
+                
                 if maximizing:
-                    score = -20000 - mate_penalty  # Very bad for maximizer (white)
+                    # White is in checkmate (bad for white)
+                    # Use negative score, with faster mates being worse (more negative)
+                    score = -19999 + mate_distance  # Mate in 1 = -19999, mate in 2 = -19998, etc.
                 else:
-                    score = 20000 + mate_penalty   # Very good for maximizer (white)
+                    # Black is in checkmate (good for white)  
+                    # Use positive score, with faster mates being better (more positive)
+                    score = 19999 - mate_distance   # Mate in 1 = 19999, mate in 2 = 19998, etc.
+                
                 self._store_transposition_simple(board_hash, depth, score)
                 return score
             else:
                 self._store_transposition_simple(board_hash, depth, 0)
                 return 0  # Stalemate or draw
         
-        # Null Move Pruning - More aggressive for better performance
+        # Null Move Pruning - Balanced approach (not too aggressive)
         current_player = 'white' if maximizing else 'black'
         in_check = board.in_check_king(current_player)
         
         if (allow_null and 
-            depth >= 2 and  # Reduced from 3 to 2 for more aggressive pruning
+            depth >= 3 and  # Restored to depth >= 3 for better decision quality
             not in_check and 
             not self._is_endgame(board)):
             
@@ -356,14 +391,14 @@ class Search:
             if not maximizing:  # Black's turn
                 current_eval = -current_eval
             
-            # More aggressive beta cutoff threshold
-            if current_eval >= beta - 50:  # Allow null move even when slightly below beta
+            # Conservative beta cutoff threshold (restored)
+            if current_eval >= beta:
                 # Make null move
                 original_player = self._make_null_move(board)
                 
                 try:
-                    # Search with more aggressive reduction for speed
-                    reduction = min(4, depth // 2 + 1)  # More aggressive reduction
+                    # Search with moderate reduction for balanced speed/accuracy
+                    reduction = 3  # Fixed reduction instead of aggressive variable reduction
                     null_score = self._minimax(board, depth - reduction, -beta, -beta + 1, not maximizing, allow_null=False, extension_count=extension_count)
                 except TimeoutError:
                     # Unmake null move on timeout
@@ -626,17 +661,31 @@ class Search:
                 del self.transposition_table[key]
     
     def _get_ordered_moves(self, board: Board, color: str) -> List[Tuple[Piece, Move]]:
-        """FAST move ordering prioritizing good captures and tactical moves."""
+        """FAST move ordering prioritizing checkmate, good captures and tactical moves."""
         moves = board.get_all_moves(color)
         
         if not moves:
             return []
         
-        # Quick separation with minimal expensive calculations
+        # Check for immediate checkmate moves first
+        checkmate_moves = []
         captures = []
         non_captures = []
         
         for piece, move in moves:
+            # Test if this move delivers checkmate
+            move_info = board.make_move_fast(piece, move)
+            try:
+                opponent_color = 'black' if color == 'white' else 'white'
+                if board.is_checkmate(opponent_color):
+                    # This move delivers checkmate - highest priority!
+                    checkmate_moves.append((piece, move))
+                    board.unmake_move_fast(piece, move, move_info)
+                    continue
+            finally:
+                board.unmake_move_fast(piece, move, move_info)
+            
+            # Not a checkmate move, categorize normally
             if move.captured:
                 # Quick SEE evaluation - only for clearly winning/losing captures
                 captured_value = self._get_piece_value(move.captured.name)
@@ -660,10 +709,15 @@ class Search:
         captures.sort(reverse=True, key=lambda x: x[0])
         non_captures.sort(reverse=True, key=lambda x: x[0])
         
-        # Return captures first, then non-captures
+        # Return checkmate moves first, then captures, then non-captures
         result = []
+        # Checkmate moves have absolute priority
+        for piece, move in checkmate_moves:
+            result.append((piece, move))
+        # Then good captures
         for _, piece, move in captures:
             result.append((piece, move))
+        # Finally quiet moves
         for _, piece, move in non_captures:
             result.append((piece, move))
         
@@ -1100,21 +1154,21 @@ class Search:
     def _calculate_lmr_reduction(self, move_index: int, depth: int, is_dangerous: bool) -> int:
         """
         Calculate Late Move Reduction amount based on move characteristics.
-        More aggressive reduction for better pruning performance.
+        Balanced approach for good performance without sacrificing decision quality.
         """
-        if is_dangerous or move_index < 3:  # Don't reduce first 3 moves or dangerous moves
+        if is_dangerous or move_index < 4:  # Don't reduce first 4 moves or dangerous moves
             return 0
         
         if depth < 3:  # Don't reduce in shallow searches
             return 0
         
-        # More aggressive reduction for better performance
-        if move_index < 6:
-            return 1  # Small reduction for moves 3-5
-        elif move_index < 12:
-            return min(2, depth // 2)  # Medium reduction for moves 6-11
+        # Conservative reduction to maintain decision quality
+        if move_index < 8:
+            return 1  # Small reduction for moves 4-7
+        elif move_index < 16:
+            return 2  # Medium reduction for moves 8-15
         else:
-            return min(3, depth // 2)  # Larger reduction for later moves
+            return min(2, depth // 3)  # Limited reduction for later moves
     
     def _make_null_move(self, board: Board) -> str:
         """Make a null move (just switch the current player)."""
