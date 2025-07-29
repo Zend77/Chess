@@ -31,8 +31,10 @@ class Search:
         self.start_time = 0.0
         self.max_time = 2.0  # Reduced time for Python performance
         self.max_depth = 4   # Reduced depth for Python performance
-        self.transposition_table = {}  # Simple transposition table
+        self.transposition_table = {}  # Enhanced transposition table with mate support
         self.killer_moves = {}  # Killer move heuristic
+        self.mate_cache = {}  # Mate distance hash table (Solution 1)
+        self.mate_sequences = {}  # Move sequence caching (Solution 7)
         self.debug_mode = False  # Disabled by default for performance
         
     def set_debug_mode(self, enabled: bool):
@@ -59,6 +61,21 @@ class Search:
         # Clear tables for new search
         self.transposition_table.clear()
         self.killer_moves.clear()
+        # Note: We intentionally keep mate_cache and mate_sequences between searches
+        # as they contain valuable long-term knowledge
+        
+        # Periodic cache cleanup to prevent memory bloat
+        if len(self.mate_cache) > 1000:
+            # Keep only the most recent 500 entries
+            items = list(self.mate_cache.items())
+            self.mate_cache = dict(items[-500:])
+            print("🧹 Cleaned mate cache (kept 500 most recent entries)")
+        
+        if len(self.mate_sequences) > 200:
+            # Keep only the most recent 100 sequences  
+            items = list(self.mate_sequences.items())
+            self.mate_sequences = dict(items[-100:])
+            print("🧹 Cleaned mate sequence cache (kept 100 most recent entries)")
         
         best_result = SearchResult()
         previous_score = None  # Track previous depth's score for bug detection
@@ -152,6 +169,27 @@ class Search:
             best_score = -inf  # White maximizes
         else:
             best_score = inf   # Black minimizes
+        
+        # SOLUTION 1 & 7: Check mate cache first (immediate lookup without search)
+        board_hash = hash(str(board.squares))  # Simple position hash
+        if board_hash in self.mate_cache:
+            mate_entry = self.mate_cache[board_hash]
+            # Verify the cached mate is still valid (moves haven't been undone)
+            if mate_entry['depth'] >= depth:  # Cached result is at least as deep
+                cached_move = mate_entry.get('best_move')
+                if cached_move and self._is_move_legal(board, cached_move, current_player):
+                    print(f"🎯 MATE CACHE HIT: {cached_move.to_algebraic()} (mate in {mate_entry['mate_distance']})")
+                    return SearchResult(cached_move, mate_entry['score'], depth)
+        
+        # Check mate sequence cache for multi-move forced sequences
+        if board_hash in self.mate_sequences:
+            sequence_entry = self.mate_sequences[board_hash]
+            if sequence_entry['moves_to_mate'] <= 5:  # Only use for short sequences
+                first_move = sequence_entry['sequence'][0] if sequence_entry['sequence'] else None
+                if first_move and self._is_move_legal(board, first_move, current_player):
+                    print(f"🎯 MATE SEQUENCE HIT: {first_move.to_algebraic()} (sequence of {len(sequence_entry['sequence'])} moves)")
+                    mate_score = 19999 - sequence_entry['moves_to_mate'] if current_player == 'white' else -19999 + sequence_entry['moves_to_mate']
+                    return SearchResult(first_move, mate_score, depth)
         
         moves = self._get_ordered_moves(board, current_player)
         
@@ -305,6 +343,23 @@ class Search:
         # Display debug information
         if self.debug_mode and move_evaluations and best_move:
             self._display_move_evaluations(move_evaluations, current_player, best_move)
+        
+        # SOLUTION 7: Store mate sequences for future use
+        if best_move and abs(best_score) >= 19990:  # Mate found
+            mate_distance = 19999 - abs(best_score)
+            if mate_distance <= 5:  # Only cache short mate sequences
+                sequence = self._extract_mate_sequence(board, best_move, current_player, int(mate_distance))
+                if sequence:
+                    self.mate_sequences[board_hash] = {
+                        'moves_to_mate': mate_distance,
+                        'sequence': sequence,
+                        'validated': True
+                    }
+                    print(f"💾 CACHING MATE SEQUENCE: {len(sequence)} moves starting with {best_move.to_algebraic()}")
+        
+        # Store the result in transposition table with best move
+        board_hash = hash(str(board.squares))
+        self._store_transposition_simple(board_hash, depth, best_score, best_move)
         
         # Return the score from the correct perspective
         # Since evaluation is always from white's perspective, we need to return
@@ -543,15 +598,35 @@ class Search:
             
         return hash_val
     
-    def _store_transposition_simple(self, board_hash: int, depth: int, score: float):
-        """Simple transposition table storage."""
+    def _store_transposition_simple(self, board_hash: int, depth: int, score: float, best_move: Optional[Move] = None):
+        """Enhanced transposition table storage with mate support (Solution 4)."""
         # Re-enabled transposition table storage for performance
         # Only store if table isn't too big
         if len(self.transposition_table) < 50000:
-            self.transposition_table[board_hash] = {
+            entry = {
                 'depth': depth,
-                'score': score
+                'score': score,
+                'best_move': best_move
             }
+            
+            # SOLUTION 4: Enhanced transposition table with mate flags
+            if abs(score) >= 19990:  # Mate score detected
+                mate_distance = 19999 - abs(score)
+                entry['flag'] = 'EXACT_MATE'
+                entry['mate_distance'] = mate_distance
+                
+                # SOLUTION 1: Store in mate cache for instant lookup
+                self.mate_cache[board_hash] = {
+                    'score': score,
+                    'depth': depth,
+                    'mate_distance': mate_distance,
+                    'best_move': best_move
+                }
+                
+                if best_move:
+                    print(f"💾 CACHING MATE: {best_move.to_algebraic()} (mate in {mate_distance})")
+            
+            self.transposition_table[board_hash] = entry
     
     def _quiescence_search_simple(self, board: Board, alpha: float, beta: float, maximizing: bool, depth: int = 0) -> float:
         """
@@ -1389,3 +1464,89 @@ class Search:
                 return -rescue_bonus  # Negative for white (black rescued a piece)
         
         return 0.0  # Piece moved but is still hanging
+    
+    def _is_move_legal(self, board: Board, move: Move, color: str) -> bool:
+        """Quick check if a move is legal for the given color."""
+        if not move or not move.initial or not move.final:
+            return False
+        
+        # Check if there's a piece of the right color at the initial square
+        initial_square = board.squares[move.initial.row][move.initial.col]
+        if not initial_square.has_piece or not initial_square.piece:
+            return False
+        
+        if initial_square.piece.color != color:
+            return False
+        
+        # Check if move is in the piece's legal moves
+        piece = initial_square.piece
+        board.calc_moves(piece, move.initial.row, move.initial.col, filter_checks=True)
+        
+        # Check if this specific move is in the piece's legal moves
+        for legal_move in piece.moves:
+            if (legal_move.initial.row == move.initial.row and 
+                legal_move.initial.col == move.initial.col and
+                legal_move.final.row == move.final.row and 
+                legal_move.final.col == move.final.col):
+                return True
+        
+        return False
+    
+    def _extract_mate_sequence(self, board: Board, first_move: Move, color: str, max_moves: int) -> List[Move]:
+        """Extract the mate sequence by performing a shallow search (Solution 7)."""
+        sequence = [first_move]
+        
+        # Make a copy of the board to explore the sequence
+        temp_board = Board()
+        temp_board.squares = [[sq for sq in row] for row in board.squares]
+        temp_board.next_player = board.next_player
+        temp_board.last_move = board.last_move
+        
+        # Try to play out the sequence
+        current_color = color
+        for move_count in range(max_moves):
+            if move_count >= len(sequence):
+                break
+                
+            move = sequence[move_count]
+            
+            # Verify the move is still legal
+            piece = temp_board.squares[move.initial.row][move.initial.col].piece
+            if not piece or piece.color != current_color:
+                break
+            
+            # Make the move
+            move_info = temp_board.make_move_fast(piece, move)
+            
+            # Check if this results in checkmate
+            opponent_color = 'black' if current_color == 'white' else 'white'
+            if temp_board.is_checkmate(opponent_color):
+                # Found checkmate, sequence is complete
+                break
+            
+            # If not checkmate, try to find the opponent's best response and our continuation
+            if move_count < max_moves - 1:
+                # Quick search for forced continuation
+                opponent_moves = temp_board.get_all_moves(opponent_color)
+                if len(opponent_moves) == 1:
+                    # Forced move for opponent
+                    opp_piece, opp_move = opponent_moves[0]
+                    temp_board.make_move_fast(opp_piece, opp_move)
+                    
+                    # Now find our next move
+                    our_moves = temp_board.get_all_moves(current_color)
+                    for our_piece, our_move in our_moves:
+                        test_info = temp_board.make_move_fast(our_piece, our_move)
+                        final_opponent_color = 'black' if current_color == 'white' else 'white'
+                        if temp_board.is_checkmate(final_opponent_color):
+                            # Found the next move in the sequence
+                            sequence.append(opp_move)
+                            sequence.append(our_move)
+                            temp_board.unmake_move_fast(our_piece, our_move, test_info)
+                            break
+                        temp_board.unmake_move_fast(our_piece, our_move, test_info)
+                    break
+            
+            current_color = opponent_color
+        
+        return sequence
