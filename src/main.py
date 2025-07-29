@@ -32,10 +32,16 @@ class Main:
             screen.fill((0, 0, 0))
 
             # AI startup guard - trigger AI for first move only after initial render
-            if (game.ai_enabled and game.ai and not game.game_over and 
-                game.next_player == game.ai.color and not game.ai_has_moved_initially):
-                game.ai_has_moved_initially = True
-                game.play_AI_turn(screen)
+            if (game.ai_enabled and not game.game_over and not game.ai_has_moved_initially):
+                if game.ai_vs_ai_mode:
+                    # AI vs AI mode - trigger first move if it's white's turn (white always starts)
+                    if game.next_player == 'white':
+                        game.ai_has_moved_initially = True
+                        game.play_AI_turn(screen)
+                elif game.ai and game.next_player == game.ai.color:
+                    # Single AI mode - trigger first move for AI color
+                    game.ai_has_moved_initially = True
+                    game.play_AI_turn(screen)
 
             # Render the game state - board, pieces, highlights, etc.
             if not game.game_over:
@@ -98,12 +104,15 @@ class Main:
                         # Toggle AI opponent on/off
                         game.ai_enabled = not game.ai_enabled
                         if game.ai_enabled:
-                            if game.ai is None:
+                            if game.ai_vs_ai_mode:
+                                # Already in AI vs AI mode, just re-enable
+                                pass
+                            elif game.ai is None:
                                 game.ai = AI(game.next_player)
                             else:
                                 game.ai.color = game.next_player
                             # If it's the AI's turn, let it move immediately
-                            if game.next_player == game.ai.color:
+                            if game.ai_vs_ai_mode or (game.ai and game.next_player == game.ai.color):
                                 game.play_AI_turn(screen)
                     elif event.key == p.K_d and not game.game_over:
                         # Handle draw offers (press D twice to accept)
@@ -150,6 +159,11 @@ class Main:
                         print("=" * 50 + "\n")
                 elif event.type == p.QUIT:
                     running = False
+
+            # AI vs AI mode: trigger AI moves continuously
+            if (game.ai_vs_ai_mode and game.ai_enabled and not game.game_over and 
+                not game.ai_is_thinking and game.ai_thinking_cooldown == 0):
+                game.play_AI_turn(screen)
 
             clock.tick(MAX_FPS)
             

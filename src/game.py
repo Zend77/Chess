@@ -23,7 +23,10 @@ class Game:
     end_message: str
     draw_offered: bool
     ai: Optional[AI]
+    ai_white: Optional[AI]
+    ai_black: Optional[AI]
     ai_enabled: bool
+    ai_vs_ai_mode: bool
     board: Board
     dragger: Dragger
     config: Config
@@ -37,7 +40,10 @@ class Game:
         self.end_message = ""
         self.draw_offered = False
         self.ai: Optional[AI] = None  # Don't create AI until after color prompt
+        self.ai_white: Optional[AI] = None  # AI for white pieces in AI vs AI mode
+        self.ai_black: Optional[AI] = None  # AI for black pieces in AI vs AI mode
         self.ai_enabled = False  # AI opponent disabled by default
+        self.ai_vs_ai_mode = False  # Flag for AI vs AI mode
         self.ai_is_thinking = False  # Flag to prevent mouse handler from triggering during AI moves
         self.ai_thinking_cooldown = 0  # Frame counter to delay flag clearing
         self.ai_has_moved_initially = False  # Flag to track if AI has made its first move
@@ -45,7 +51,7 @@ class Game:
         self.AI_color_prompt()  # Let user choose AI color - creates AI here
         self.board = Board()
         # Set up the standard starting position
-        self.board.set_fen("r1bqkb1r/1ppp1ppp/p1n2n2/1B2p3/4P3/2N2N2/PPPP1PPP/R1BQK2R w KQkq - 0 1")
+        self.board.set_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
         self.dragger = Dragger()  # Handles drag-and-drop piece movement
         self.config = Config()  # Visual themes and settings
         self.fen_history: list[str] = []  # Track position history for threefold repetition
@@ -54,9 +60,17 @@ class Game:
         
     def update_book_status_after_human_move(self):
         """Check if the current position is still in the opening book after a human move."""
-        if self.ai and self.in_book:
+        # In AI vs AI mode, check with white AI's opening book
+        # In single AI mode, check with the AI's opening book
+        ai_to_check = None
+        if self.ai_vs_ai_mode and self.ai_white:
+            ai_to_check = self.ai_white
+        elif self.ai:
+            ai_to_check = self.ai
+            
+        if ai_to_check and self.in_book:
             current_fen = FEN.get_fen(self.board)
-            if not self.ai.opening_book.is_in_book(current_fen):
+            if not ai_to_check.opening_book.is_in_book(current_fen):
                 self.in_book = False
 
     @property
@@ -199,7 +213,11 @@ class Game:
         
         # Reset AI moves counter when switching away from AI's turn
         if hasattr(self, '_ai_moves_this_turn'):
-            if self.ai and self.next_player != self.ai.color:
+            if self.ai_vs_ai_mode:
+                # In AI vs AI mode, reset counter when switching turns
+                self._ai_moves_this_turn = 0
+            elif self.ai and self.next_player != self.ai.color:
+                # In single AI mode, reset when switching away from AI
                 self._ai_moves_this_turn = 0
 
     def change_theme(self) -> None:
@@ -334,11 +352,13 @@ class Game:
         # Don't process mouse events during AI moves or shortly after
         if self.ai_is_thinking or self.ai_thinking_cooldown > 0:
             # Clear any remaining events
-            import pygame as p
             p.event.clear()
             return
         
-        # Don't process mouse events when it's the AI's turn
+        # Don't process mouse events when it's the AI's turn or in AI vs AI mode
+        if self.ai_vs_ai_mode:
+            return
+        
         if self.ai_enabled and self.ai and self.next_player == self.ai.color:
             return
         
@@ -465,9 +485,18 @@ class Game:
                         print("Material Advantage: Even")
 
                     # Store AI trigger info but don't execute yet
-                    should_trigger_ai = (self.ai_enabled and self.ai and self.next_player == self.ai.color and 
-                                       not self.game_over and not self.ai_is_thinking)
-                    ai_color = self.ai.color if (should_trigger_ai and self.ai) else None
+                    should_trigger_ai = False
+                    ai_color = None
+                    
+                    if self.ai_enabled and not self.game_over and not self.ai_is_thinking:
+                        if self.ai_vs_ai_mode:
+                            # AI vs AI mode - always trigger AI for next move
+                            should_trigger_ai = True
+                            ai_color = self.next_player
+                        elif self.ai and self.next_player == self.ai.color:
+                            # Single AI mode - trigger if it's AI's turn
+                            should_trigger_ai = True
+                            ai_color = self.ai.color
 
             # Always clean up dragger state before potentially triggering AI
             dragger.undrag_piece(theme_name=self.theme_name)
@@ -475,7 +504,7 @@ class Game:
             # After complete UI cleanup, trigger AI if needed
             if should_trigger_ai:
                 # Double-check that we should actually trigger AI
-                if self.ai and self.next_player == self.ai.color:
+                if self.ai_vs_ai_mode or (self.ai and self.next_player == self.ai.color):
                     # Force complete visual update
                     surface.fill((0, 0, 0))  # Clear screen
                     self.show_bg(surface)
@@ -544,17 +573,19 @@ class Game:
         color_prompt = title.render("AI Color Selection", True, (255, 255, 255))
         option1 = font.render("Press W for AI as White", True, (255, 255, 255))
         option2 = font.render("Press B for AI as Black", True, (255, 255, 255))
-        option3 = font.render("Press N for no AI", True, (255, 255, 255))
+        option3 = font.render("Press A for AI vs AI (both)", True, (255, 255, 255))
+        option4 = font.render("Press N for no AI", True, (255, 255, 255))
 
         ai_color = None
         selecting_color = True
         
         while selecting_color:
             screen.fill((0, 0, 0))
-            screen.blit(color_prompt, (WIDTH // 2 - color_prompt.get_width() // 2, HEIGHT // 2 - 100))
-            screen.blit(option1, (WIDTH // 2 - option1.get_width() // 2, HEIGHT // 2 - 40))
-            screen.blit(option2, (WIDTH // 2 - option2.get_width() // 2, HEIGHT // 2))
-            screen.blit(option3, (WIDTH // 2 - option3.get_width() // 2, HEIGHT // 2 + 40))
+            screen.blit(color_prompt, (WIDTH // 2 - color_prompt.get_width() // 2, HEIGHT // 2 - 120))
+            screen.blit(option1, (WIDTH // 2 - option1.get_width() // 2, HEIGHT // 2 - 60))
+            screen.blit(option2, (WIDTH // 2 - option2.get_width() // 2, HEIGHT // 2 - 20))
+            screen.blit(option3, (WIDTH // 2 - option3.get_width() // 2, HEIGHT // 2 + 20))
+            screen.blit(option4, (WIDTH // 2 - option4.get_width() // 2, HEIGHT // 2 + 60))
             p.display.flip()
 
             for event in p.event.get():
@@ -567,6 +598,9 @@ class Game:
                         selecting_color = False
                     elif event.key == p.K_b:
                         ai_color = 'black'
+                        selecting_color = False
+                    elif event.key == p.K_a:
+                        ai_color = 'both'
                         selecting_color = False
                     elif event.key == p.K_n:
                         self.ai = None  # No AI created
@@ -610,8 +644,19 @@ class Game:
                         }
                         if event.key in difficulty_map:
                             difficulty = difficulty_map[event.key]
-                            self.ai = AI(ai_color, difficulty)
-                            self.ai_enabled = True
+                            if ai_color == 'both':
+                                # AI vs AI mode - create two AI instances
+                                self.ai_white = AI('white', difficulty)
+                                self.ai_black = AI('black', difficulty)
+                                self.ai_vs_ai_mode = True
+                                self.ai_enabled = True
+                                # Set ai to white AI for compatibility with existing code
+                                self.ai = self.ai_white
+                            else:
+                                # Single AI mode
+                                self.ai = AI(ai_color, difficulty)
+                                self.ai_enabled = True
+                                self.ai_vs_ai_mode = False
                             selecting_difficulty = False
 
     def play_AI_turn(self, surface) -> None:
@@ -626,11 +671,24 @@ class Game:
         # Set thinking flag immediately to block all other events
         self.ai_is_thinking = True
             
-        if not self.ai:
+        if not self.ai_enabled:
             self.ai_is_thinking = False
             return
-            
-        if not self.ai_enabled:
+        
+        # Determine which AI should move
+        current_ai = None
+        if self.ai_vs_ai_mode:
+            # AI vs AI mode - use the appropriate AI for the current player
+            if self.next_player == 'white':
+                current_ai = self.ai_white
+            else:
+                current_ai = self.ai_black
+        else:
+            # Single AI mode - check if it's the AI's turn
+            if self.ai and self.next_player == self.ai.color:
+                current_ai = self.ai
+        
+        if not current_ai:
             self.ai_is_thinking = False
             return
             
@@ -642,12 +700,6 @@ class Game:
         if self._ai_moves_this_turn > 1:
             # Emergency abort - AI trying to make multiple moves
             self.ai_is_thinking = False
-            return
-        
-        # Verify it's actually the AI's turn
-        if self.next_player != self.ai.color:
-            self.ai_is_thinking = False
-            self.ai_thinking_cooldown = 0
             return
         
         # Completely clear all UI state and pygame events to prevent phantom moves
@@ -664,19 +716,19 @@ class Game:
         p.event.clear()
         
         # Only use book move if still in book
-        piece, move = self.ai.get_best_move(self.board, use_book=self.in_book)
+        piece, move = current_ai.get_best_move(self.board, use_book=self.in_book)
         
         # After timeout, validate that piece and move are consistent with current board
         if piece is not None and move is not None:
             actual_piece = self.board.squares[move.initial.row][move.initial.col].piece
             if actual_piece != piece:
                 # Force AI to recalculate with current board state
-                piece, move = self.ai._emergency_fallback(self.board)
+                piece, move = current_ai._emergency_fallback(self.board)
         
         if piece is not None and move is not None:
             # Validate the move is actually legal
-            if self.ai.color:  # Type check
-                legal_moves = self.board.get_all_moves(self.ai.color)
+            if current_ai.color:  # Type check
+                legal_moves = self.board.get_all_moves(current_ai.color)
                 legal_move_strings = [m.to_algebraic() for p, m in legal_moves]
                 
                 if move.to_algebraic() not in legal_move_strings:
@@ -703,8 +755,8 @@ class Game:
             self.check_game_end()
             
         else:
-            if self.ai.color:  # Type check
-                legal_moves = self.board.get_all_moves(self.ai.color)
+            if current_ai.color:  # Type check
+                legal_moves = self.board.get_all_moves(current_ai.color)
                 if not legal_moves:
                     self.check_game_end()
         

@@ -96,21 +96,6 @@ class Search:
                     
                 print(f"Depth {current_depth}: {result.score/100.0:+.2f} pawns - {result.best_move.to_algebraic() if result.best_move else 'None'}")
                 
-                # IMPROVED DEBUGGING: Only flag as bug if scores get significantly WORSE at deeper depths
-                # It's normal for Black to choose moves that are positive (bad for Black) if they're the best available
-                # The bug is when deeper search makes BLACK choose WORSE moves (higher positive scores)
-                if (board.next_player == 'black' and 
-                    current_depth > 1 and 
-                    previous_score is not None):
-                    
-                    score_change = result.score - previous_score
-                    if score_change > 200:  # Score got 2+ pawns worse for Black
-                        print(f"  🚨 POTENTIAL BUG: Black's score got {score_change/100.0:.2f} pawns WORSE at depth {current_depth}")
-                        print(f"  🚨 Previous: {previous_score/100.0:+.2f}, Current: {result.score/100.0:+.2f}")
-                        print(f"  🚨 This suggests search is optimizing for White instead of Black!")
-                
-                # Store current score for next iteration comparison
-                previous_score = result.score
                 
                 # Debug: Show if the move changed between depths
                 if best_result.best_move and result.best_move:
