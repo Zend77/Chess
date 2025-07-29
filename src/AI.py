@@ -38,14 +38,14 @@ class AI:
     def _get_difficulty_settings(self, difficulty: str) -> Tuple[int, float]:
         """Get search depth and time limit based on difficulty level - optimized for speed."""
         settings = {
-            'easy': (2, 2.0),        # Fast and simple
-            'medium': (3, 3.0),      # Good balance 
-            'hard': (4, 5.0),        # Strong play
-            'expert': (5, 8.0),      # Very strong
-            'master': (6, 12.0),     # Near-master level
-            'grandmaster': (7, 20.0) # Master level
+            'easy': (2, 40.0),        
+            'medium': (3, 40.0),      
+            'hard': (4, 50.0),        
+            'expert': (5, 80.0),      
+            'master': (6, 120.0),     
+            'grandmaster': (10, 600.0) 
         }
-        return settings.get(difficulty, (3, 3.0))
+        return settings.get(difficulty, (3, 40.0))
     
     def get_best_move(self, board, use_book=True) -> Tuple[Optional[Piece], Optional[Move]]:
         """
